@@ -73,41 +73,41 @@ void login();
 // 登出数据库
 void logout();
 
-// 写实时模拟量
+// 1写实时模拟量
 // unit_id: 机组ID
 // time: 断面时间戳
 // analog_array_ptr: 指向模拟量数组的指针
 // count: 数组长度
 void write_rt_analog(int64_t unit_id, int64_t time, Analog *analog_array_ptr, int64_t count);
 
-// 写实时数字量
+// 2写实时数字量
 // unit_id: 机组ID
 // time: 断面时间戳
 // digital_array_ptr: 指向数字量数组的指针
 // count: 数组长度
 void write_rt_digital(int64_t unit_id, int64_t time, Digital *digital_array_ptr, int64_t count);
 
-// 写历史模拟量
+// 3写历史模拟量
 // unit_id: 机组ID
 // time: 断面时间戳
 // analog_array_ptr: 指向模拟量数组的指针
 // count: 数组长度
 void write_his_analog(int64_t unit_id, int64_t time, Analog *analog_array_ptr, int64_t count);
 
-// 写历史数字量
+// 4写历史数字量
 // unit_id: 机组ID
 // time: 断面时间戳
 // digital_array_ptr: 指向数字量数组的指针
 // count: 数组长度
 void write_his_digital(int64_t unit_id, int64_t time, Digital *digital_array_ptr, int64_t count);
 
-// 写静态模拟量
+// 5写静态模拟量
 // unit_id: 机组ID
 // static_analog_array_ptr: 指向静态模拟量数组的指针
 // count: 数组长度
 void write_static_analog(int64_t unit_id, StaticAnalog *static_analog_array_ptr, int64_t count);
 
-// 写静态数字量
+// 6 写静态数字量
 // unit_id: 机组ID
 // static_digital_array_ptr: 指向静态数字量数组的指针
 // count: 数组长度

@@ -938,6 +938,7 @@ func (df *WritePlugin) WriteHisDigital(unitNumber int64, section DigitalSection)
 
 func (df *WritePlugin) WriteStaticAnalog(unitNumber int64, section StaticAnalogSection) {
 	if unitNumber == 1 {
+		// 这里数据会传送到插件
 		df.SyncWriteStaticAnalog(0, section)
 	} else {
 		wg := new(sync.WaitGroup)

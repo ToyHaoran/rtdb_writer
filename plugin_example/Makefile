@@ -25,6 +25,9 @@ SRC := write_plugin.c
 # Default target
 all: $(TARGET)
 
+# go文件不能用make，用go build同理
+# go build -buildmode=c-shared -o gowrite_plugin.dll .\write_plugin.go
+# gcc -fPIC -shared -o cwrite_plugin.dll write_plugin.c
 # Build target for shared library
 $(TARGET): $(SRC)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
