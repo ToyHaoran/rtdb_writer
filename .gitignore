@@ -10,3 +10,4 @@ digital.csv
 csvgen/main.go
 writer/tests.md
 /plugin_example/gowrite_plugin.h
+/.run/

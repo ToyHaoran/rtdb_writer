@@ -21,7 +21,7 @@ var (
 	user     string
 	password string
 )
-var session client.Session
+var sessionPool client.SessionPool
 
 func main() {
 	// Need a main function to make CGO compile package as C shared library
@@ -35,23 +35,20 @@ func login(param *C.char) {
 	flag.StringVar(&user, "user", "root", "--user=root")
 	flag.StringVar(&password, "password", "root", "--password=root")
 	flag.Parse()
-	config := &client.Config{
+	config := &client.PoolConfig{
 		Host:     host,
 		Port:     port,
 		UserName: user,
 		Password: password,
 	}
-	// TODO 是否要使用线程池？
-	session = client.NewSession(config)
-	if err := session.Open(false, 0); err != nil {
-		log.Fatal(err)
-	}
+
+	sessionPool = client.NewSessionPool(config, 10, 60000, 60000, false)
 }
 
 //export logout
 func logout() {
 	fmt.Println("登出数据库")
-	session.Close()
+	sessionPool.Close()
 }
 
 type Analog struct {
@@ -105,7 +102,11 @@ func write_rt_analog(unit_id C.int64_t, time C.int64_t, analog_array_ptr *C.Anal
 		dataTypes = append(dataTypes, []client.TSDataType{client.INT32, client.FLOAT, client.FLOAT, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.FLOAT, client.BOOLEAN, client.TEXT, client.INT32})
 		values = append(values, []interface{}{int32(an.P_NUM), an.AV, an.AVR, an.Q, an.BF, an.QF, an.FAI, an.MS, string(an.TEW), int32(an.CST)})
 	}
-	checkError(session.InsertRecordsOfOneDevice(deviceId, timestamps, measurements, dataTypes, values, false))
+	session, err := sessionPool.GetSession()
+	defer sessionPool.PutBack(session)
+	if err == nil {
+		checkError(session.InsertRecordsOfOneDevice(deviceId, timestamps, measurements, dataTypes, values, false))
+	}
 	fmt.Println("写实时模拟量OK")
 }
 
@@ -147,9 +148,11 @@ func write_rt_analog_list(unit_id C.int64_t, time *C.int64_t, analog_array_array
 			dataTypes = append(dataTypes, []client.TSDataType{client.INT32, client.FLOAT, client.FLOAT, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.FLOAT, client.BOOLEAN, client.TEXT, client.INT32})
 			values = append(values, []interface{}{int32(an.P_NUM), an.AV, an.AVR, an.Q, an.BF, an.QF, an.FAI, an.MS, string(an.TEW), int32(an.CST)})
 		}
-
-		// 模拟调用数据库插入函数
-		checkError(session.InsertRecordsOfOneDevice(deviceId, timestamps, measurements, dataTypes, values, false))
+		session, err := sessionPool.GetSession()
+		defer sessionPool.PutBack(session)
+		if err == nil {
+			checkError(session.InsertRecordsOfOneDevice(deviceId, timestamps, measurements, dataTypes, values, false))
+		}
 	}
 	fmt.Println("写实时模拟量断面OK")
 }
@@ -178,8 +181,11 @@ func write_rt_digital(unit_id C.int64_t, time C.int64_t, digital_array_ptr *C.Di
 		dataTypes = append(dataTypes, []client.TSDataType{client.INT32, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.TEXT, client.INT32})
 		values = append(values, []interface{}{int32(di.P_NUM), di.DV, di.DVR, di.Q, di.BF, di.FQ, di.FAI, di.MS, string(di.TEW), int32(di.CST)})
 	}
-	checkError(session.InsertRecordsOfOneDevice(deviceId, timestamps, measurements, dataTypes, values, false))
-
+	session, err := sessionPool.GetSession()
+	defer sessionPool.PutBack(session)
+	if err == nil {
+		checkError(session.InsertRecordsOfOneDevice(deviceId, timestamps, measurements, dataTypes, values, false))
+	}
 	fmt.Println("写实时数字量OK")
 }
 
@@ -221,7 +227,11 @@ func write_his_analog(unit_id C.int64_t, time C.int64_t, analog_array_ptr *C.Ana
 		dataTypes = append(dataTypes, []client.TSDataType{client.INT32, client.FLOAT, client.FLOAT, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.FLOAT, client.BOOLEAN, client.TEXT, client.INT32})
 		values = append(values, []interface{}{int32(an.P_NUM), an.AV, an.AVR, an.Q, an.BF, an.QF, an.FAI, an.MS, string(an.TEW), int32(an.CST)})
 	}
-	checkError(session.InsertRecordsOfOneDevice(deviceId, timestamps, measurements, dataTypes, values, false))
+	session, err := sessionPool.GetSession()
+	defer sessionPool.PutBack(session)
+	if err == nil {
+		checkError(session.InsertRecordsOfOneDevice(deviceId, timestamps, measurements, dataTypes, values, false))
+	}
 	fmt.Println("写历史模拟量OK")
 }
 
@@ -249,7 +259,11 @@ func write_his_digital(unit_id C.int64_t, time C.int64_t, digital_array_ptr *C.D
 		dataTypes = append(dataTypes, []client.TSDataType{client.INT32, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.TEXT, client.INT32})
 		values = append(values, []interface{}{int32(di.P_NUM), di.DV, di.DVR, di.Q, di.BF, di.FQ, di.FAI, di.MS, string(di.TEW), int32(di.CST)})
 	}
-	checkError(session.InsertRecordsOfOneDevice(deviceId, timestamps, measurements, dataTypes, values, false))
+	session, err := sessionPool.GetSession()
+	defer sessionPool.PutBack(session)
+	if err == nil {
+		checkError(session.InsertRecordsOfOneDevice(deviceId, timestamps, measurements, dataTypes, values, false))
+	}
 
 	fmt.Println("写历史数字量OK")
 }
@@ -300,7 +314,11 @@ func write_static_analog(unit_id C.int64_t, static_analog_array_ptr *C.StaticAna
 		dataTypes = append(dataTypes, []client.TSDataType{client.INT32, client.INT32, client.INT32, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.TEXT, client.TEXT, client.TEXT, client.TEXT, client.FLOAT, client.FLOAT})
 		values = append(values, []interface{}{sa.P_NUM, int32(sa.TAGT), int32(sa.FACK), sa.L4AR, sa.L3AR, sa.L2AR, sa.L1AR, sa.H4AR, sa.H3AR, sa.H2AR, sa.H1AR, string(sa.CHN[:]), string(sa.PN[:]), string(sa.DESC[:]), string(sa.UNIT[:]), sa.MU, sa.MD})
 	}
-	checkError(session.InsertRecordsOfOneDevice(deviceId, timestamps, measurements, dataTypes, values, false))
+	session, err := sessionPool.GetSession()
+	defer sessionPool.PutBack(session)
+	if err == nil {
+		checkError(session.InsertRecordsOfOneDevice(deviceId, timestamps, measurements, dataTypes, values, false))
+	}
 	fmt.Println("写静态模拟量OK")
 }
 
@@ -337,8 +355,11 @@ func write_static_digital(unit_id C.int64_t, static_digital_array_ptr *C.StaticD
 		dataTypes = append(dataTypes, []client.TSDataType{client.INT32, client.INT32, client.TEXT, client.TEXT, client.TEXT, client.TEXT})
 		values = append(values, []interface{}{sd.P_NUM, int32(sd.FACK), string(sd.CHN[:]), string(sd.PN[:]), string(sd.DESC[:]), string(sd.UNIT[:])})
 	}
-
-	checkError(session.InsertRecordsOfOneDevice(deviceId, timestamps, measurements, dataTypes, values, false))
+	session, err := sessionPool.GetSession()
+	defer sessionPool.PutBack(session)
+	if err == nil {
+		checkError(session.InsertRecordsOfOneDevice(deviceId, timestamps, measurements, dataTypes, values, false))
+	}
 	fmt.Println("写静态数字量OK")
 }
 
