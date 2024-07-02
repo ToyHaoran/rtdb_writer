@@ -34,9 +34,9 @@ int close_library(DYLIB_HANDLE  handle) {
     return CLOSE_LIBRARY(handle.handle);
 }
 
-void dy_login(DYLIB_HANDLE handle) {
-    void (*login)() = (void (*)()) GET_FUNCTION(handle.handle, "login");
-    login();
+void dy_login(DYLIB_HANDLE handle, char* param) {
+    void (*login)(char*) = (void (*)(char*)) GET_FUNCTION(handle.handle, "login");
+    login(param);
 }
 
 void dy_logout(DYLIB_HANDLE handle) {
@@ -52,6 +52,16 @@ void dy_write_rt_analog(DYLIB_HANDLE handle, int64_t unit_id, int64_t time, Anal
 void dy_write_rt_digital(DYLIB_HANDLE handle, int64_t unit_id, int64_t time, Digital *digital, int64_t count) {
     void (*write_rt_digital)(int64_t, int64_t, Digital*, int64_t) = (void (*)(int64_t, int64_t, Digital*, int64_t)) GET_FUNCTION(handle.handle, "write_rt_digital");
     write_rt_digital(unit_id, time, digital, count);
+}
+
+void dy_write_rt_analog_list(DYLIB_HANDLE handle, int64_t unit_id, int64_t *time, Analog **analog_array_array_ptr, int64_t *array_count, int64_t count) {
+    void (*write_rt_analog_list)(int64_t, int64_t*, Analog**, int64_t*, int64_t) = (void (*)(int64_t, int64_t*, Analog**, int64_t*, int64_t)) GET_FUNCTION(handle.handle, "write_rt_analog_list");
+    write_rt_analog_list(unit_id, time, analog_array_array_ptr, array_count, count);
+}
+
+void dy_write_rt_digital_list(DYLIB_HANDLE handle, int64_t unit_id, int64_t *time, Digital **digital_array_array_ptr, int64_t *array_count, int64_t count) {
+    void (*write_rt_digital_list)(int64_t, int64_t*, Digital**, int64_t*, int64_t) = (void (*)(int64_t, int64_t*, Digital**, int64_t*, int64_t)) GET_FUNCTION(handle.handle, "write_rt_digital_list");
+    write_rt_digital_list(unit_id, time, digital_array_array_ptr, array_count, count);
 }
 
 

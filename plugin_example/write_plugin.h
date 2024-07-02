@@ -68,46 +68,63 @@ typedef struct _StaticDigital_ {
 } StaticDigital;
 
 // 登陆数据库
-void login();
+// param是命令行向login传递的参数, 如果参数为空则param为NULL
+void login(char *param);
 
 // 登出数据库
 void logout();
 
-// 1写实时模拟量
+// 写实时模拟量
 // unit_id: 机组ID
 // time: 断面时间戳
 // analog_array_ptr: 指向模拟量数组的指针
 // count: 数组长度
 void write_rt_analog(int64_t unit_id, int64_t time, Analog *analog_array_ptr, int64_t count);
 
-// 2写实时数字量
+// 写实时数字量
 // unit_id: 机组ID
 // time: 断面时间戳
 // digital_array_ptr: 指向数字量数组的指针
 // count: 数组长度
 void write_rt_digital(int64_t unit_id, int64_t time, Digital *digital_array_ptr, int64_t count);
 
-// 3写历史模拟量
+// 写实时模拟量
+// unit_id: 机组ID
+// count: 断面数量
+// time: 时间列表, 包含count个时间
+// analog_array_array_ptr: 模拟量断面数组, 包含count个断面的模拟量
+// array_count: 每个断面中包含值的数量
+void write_rt_analog_list(int64_t unit_id, int64_t *time, Analog **analog_array_array_ptr, int64_t *array_count, int64_t count);
+
+// 写实时数字量
+// unit_id: 机组ID
+// count: 断面数量
+// time: 时间列表, 包含count个时间
+// analog_array_array_ptr: 数字量断面数组, 包含count个断面的数字量
+// array_count: 每个断面中包含值的数量
+void write_rt_digital_list(int64_t unit_id, int64_t *time, Digital **digital_array_array_ptr, int64_t *array_count, int64_t count);
+
+// 写历史模拟量
 // unit_id: 机组ID
 // time: 断面时间戳
 // analog_array_ptr: 指向模拟量数组的指针
 // count: 数组长度
 void write_his_analog(int64_t unit_id, int64_t time, Analog *analog_array_ptr, int64_t count);
 
-// 4写历史数字量
+// 写历史数字量
 // unit_id: 机组ID
 // time: 断面时间戳
 // digital_array_ptr: 指向数字量数组的指针
 // count: 数组长度
 void write_his_digital(int64_t unit_id, int64_t time, Digital *digital_array_ptr, int64_t count);
 
-// 5写静态模拟量
+// 写静态模拟量
 // unit_id: 机组ID
 // static_analog_array_ptr: 指向静态模拟量数组的指针
 // count: 数组长度
 void write_static_analog(int64_t unit_id, StaticAnalog *static_analog_array_ptr, int64_t count);
 
-// 6 写静态数字量
+// 写静态数字量
 // unit_id: 机组ID
 // static_digital_array_ptr: 指向静态数字量数组的指针
 // count: 数组长度
