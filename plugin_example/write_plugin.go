@@ -21,6 +21,7 @@ var (
 	user     string
 	password string
 )
+var baseRoot = "root.sg"
 var sessionPool client.SessionPool
 
 func main() {
@@ -86,28 +87,67 @@ type Digital struct {
 //export write_rt_analog
 func write_rt_analog(unit_id C.int64_t, time C.int64_t, analog_array_ptr *C.Analog, count C.int64_t) {
 	fmt.Println("写实时模拟量start")
-	goCount := int64(count)
-	analogs := (*[1 << 30]Analog)(unsafe.Pointer(analog_array_ptr))[:goCount:goCount]
-	var (
-		deviceId     = "root.sg1.dev1"
-		timestamps   []int64
-		measurements [][]string
-		dataTypes    [][]client.TSDataType
-		values       [][]interface{}
-	)
+	deviceCount := int64(count)
+	analogs := (*[1 << 30]Analog)(unsafe.Pointer(analog_array_ptr))[:deviceCount:deviceCount]
 
-	for _, an := range analogs {
-		timestamps = append(timestamps, int64(time))
-		measurements = append(measurements, []string{"P_NUM", "AV", "AVR", "Q", "BF", "QF", "FAI", "MS", "TEW", "CST"})
-		dataTypes = append(dataTypes, []client.TSDataType{client.INT32, client.FLOAT, client.FLOAT, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.FLOAT, client.BOOLEAN, client.TEXT, client.INT32})
-		values = append(values, []interface{}{int32(an.P_NUM), an.AV, an.AVR, an.Q, an.BF, an.QF, an.FAI, an.MS, string(an.TEW), int32(an.CST)})
+	var tablets []*client.Tablet
+	for i := int64(0); i < deviceCount; i++ {
+		device := fmt.Sprintf("%s.unit%d.dev%d", baseRoot, int64(unit_id), i)
+		// TODO 精简代码
+		// 构建表头schemas
+		measurements := []string{"P_NUM", "AV", "AVR", "Q", "BF", "QF", "FAI", "MS", "TEW", "CST"}
+		dataTypes := []client.TSDataType{client.INT32, client.FLOAT, client.FLOAT, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.FLOAT, client.BOOLEAN, client.TEXT, client.INT32}
+		measurementSchemas := make([]*client.MeasurementSchema, len(measurements))
+		for j := range measurements {
+			measurementSchemas[j] = &client.MeasurementSchema{
+				Measurement: measurements[j],
+				DataType:    dataTypes[j],
+			}
+		}
+		rowCount := 1 // 就一个time，就一行
+		tablet, _ := client.NewTablet(device, measurementSchemas, rowCount)
+		for row := 0; row < int(rowCount); row++ {
+			tablet.SetTimestamp(int64(time), row)
+			tablet.SetValueAt(analogs[i].P_NUM, 0, row)
+			tablet.SetValueAt(analogs[i].AV, 1, row)
+			tablet.SetValueAt(analogs[i].AVR, 2, row)
+			tablet.SetValueAt(analogs[i].Q, 3, row)
+			tablet.SetValueAt(analogs[i].BF, 4, row)
+			tablet.SetValueAt(analogs[i].QF, 5, row)
+			tablet.SetValueAt(analogs[i].FAI, 6, row)
+			tablet.SetValueAt(analogs[i].MS, 7, row)
+			tablet.SetValueAt(string(analogs[i].TEW), 8, row)
+			tablet.SetValueAt(int32(analogs[i].CST), 9, row)
+		}
+		tablets = append(tablets, tablet)
 	}
 	session, err := sessionPool.GetSession()
 	defer sessionPool.PutBack(session)
 	if err == nil {
-		checkError(session.InsertRecordsOfOneDevice(deviceId, timestamps, measurements, dataTypes, values, false))
+		checkError(session.InsertTablets(tablets, false))
 	}
 	fmt.Println("写实时模拟量OK")
+
+	//var (
+	//	deviceId     = "root.sg1.dev1"
+	//	timestamps   []int64
+	//	measurements [][]string
+	//	dataTypes    [][]client.TSDataType
+	//	values       [][]interface{}
+	//)
+	//
+	//for _, an := range analogs {
+	//	timestamps = append(timestamps, int64(time))
+	//	measurements = append(measurements, []string{"P_NUM", "AV", "AVR", "Q", "BF", "QF", "FAI", "MS", "TEW", "CST"})
+	//	dataTypes = append(dataTypes, []client.TSDataType{client.INT32, client.FLOAT, client.FLOAT, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.FLOAT, client.BOOLEAN, client.TEXT, client.INT32})
+	//	values = append(values, []interface{}{int32(an.P_NUM), an.AV, an.AVR, an.Q, an.BF, an.QF, an.FAI, an.MS, string(an.TEW), int32(an.CST)})
+	//}
+	//session, err := sessionPool.GetSession()
+	//defer sessionPool.PutBack(session)
+	//if err == nil {
+	//	checkError(session.InsertRecordsOfOneDevice(deviceId, timestamps, measurements, dataTypes, values, false))
+	//}
+	//fmt.Println("写实时模拟量OK")
 }
 
 // 1.1 写实时模拟量断面
@@ -120,40 +160,40 @@ func write_rt_analog(unit_id C.int64_t, time C.int64_t, analog_array_ptr *C.Anal
 //export write_rt_analog_list
 func write_rt_analog_list(unit_id C.int64_t, time *C.int64_t, analog_array_array_ptr **C.Analog, array_count *C.int64_t, count C.int64_t) {
 	fmt.Println("写实时模拟量断面start")
-	goSectionCount := int64(count)
-	analogsPtr := (*[1 << 30]*Analog)(unsafe.Pointer(analog_array_array_ptr))[:goSectionCount:goSectionCount]
-	times := (*[1 << 30]int64)(unsafe.Pointer(time))[:goSectionCount:goSectionCount]
-	analogsCount := (*[1 << 30]int64)(unsafe.Pointer(array_count))[:goSectionCount:goSectionCount]
-	for i := int64(0); i < goSectionCount; i++ {
-		// 获取每个断面的模拟量数组长度
-		goCount := int(analogsCount[i])
-		// 确保 goCount 不会超过 analogsPtr[i] 指向的数组的实际长度
-		if goCount > cap((*[1 << 30]Analog)(unsafe.Pointer(analogsPtr[i]))) {
-			fmt.Printf("goCount %d exceeds the capacity of analogs array for index %d\n", goCount, i)
-			continue
-		}
-		// 获取模拟量数组
-		analogs := (*[1 << 30]Analog)(unsafe.Pointer(analogsPtr[i]))[:goCount:goCount]
-		// 初始化存储数据的变量
-		var (
-			deviceId     = "root.sg1.dev11"
-			timestamps   []int64
-			measurements [][]string
-			dataTypes    [][]client.TSDataType
-			values       [][]interface{}
-		)
-		for _, an := range analogs {
-			timestamps = append(timestamps, int64(times[i]))
-			measurements = append(measurements, []string{"P_NUM", "AV", "AVR", "Q", "BF", "QF", "FAI", "MS", "TEW", "CST"})
-			dataTypes = append(dataTypes, []client.TSDataType{client.INT32, client.FLOAT, client.FLOAT, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.FLOAT, client.BOOLEAN, client.TEXT, client.INT32})
-			values = append(values, []interface{}{int32(an.P_NUM), an.AV, an.AVR, an.Q, an.BF, an.QF, an.FAI, an.MS, string(an.TEW), int32(an.CST)})
-		}
-		session, err := sessionPool.GetSession()
-		defer sessionPool.PutBack(session)
-		if err == nil {
-			checkError(session.InsertRecordsOfOneDevice(deviceId, timestamps, measurements, dataTypes, values, false))
-		}
-	}
+	//goSectionCount := int64(count)
+	//analogsPtr := (*[1 << 30]*Analog)(unsafe.Pointer(analog_array_array_ptr))[:goSectionCount:goSectionCount]
+	//times := (*[1 << 30]int64)(unsafe.Pointer(time))[:goSectionCount:goSectionCount]
+	//analogsCount := (*[1 << 30]int64)(unsafe.Pointer(array_count))[:goSectionCount:goSectionCount]
+	//for i := int64(0); i < goSectionCount; i++ {
+	//	// 获取每个断面的模拟量数组长度
+	//	goCount := int(analogsCount[i])
+	//	// 确保 goCount 不会超过 analogsPtr[i] 指向的数组的实际长度
+	//	if goCount > cap((*[1 << 30]Analog)(unsafe.Pointer(analogsPtr[i]))) {
+	//		fmt.Printf("goCount %d exceeds the capacity of analogs array for index %d\n", goCount, i)
+	//		continue
+	//	}
+	//	// 获取模拟量数组
+	//	analogs := (*[1 << 30]Analog)(unsafe.Pointer(analogsPtr[i]))[:goCount:goCount]
+	//	// 初始化存储数据的变量
+	//	var (
+	//		deviceId     = "root.sg1.dev11"
+	//		timestamps   []int64
+	//		measurements [][]string
+	//		dataTypes    [][]client.TSDataType
+	//		values       [][]interface{}
+	//	)
+	//	for _, an := range analogs {
+	//		timestamps = append(timestamps, int64(times[i]))
+	//		measurements = append(measurements, []string{"P_NUM", "AV", "AVR", "Q", "BF", "QF", "FAI", "MS", "TEW", "CST"})
+	//		dataTypes = append(dataTypes, []client.TSDataType{client.INT32, client.FLOAT, client.FLOAT, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.FLOAT, client.BOOLEAN, client.TEXT, client.INT32})
+	//		values = append(values, []interface{}{int32(an.P_NUM), an.AV, an.AVR, an.Q, an.BF, an.QF, an.FAI, an.MS, string(an.TEW), int32(an.CST)})
+	//	}
+	//	session, err := sessionPool.GetSession()
+	//	defer sessionPool.PutBack(session)
+	//	if err == nil {
+	//		checkError(session.InsertRecordsOfOneDevice(deviceId, timestamps, measurements, dataTypes, values, false))
+	//	}
+	//}
 	fmt.Println("写实时模拟量断面OK")
 }
 

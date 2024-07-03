@@ -41,7 +41,7 @@ var (
 var sessionPool client.SessionPool
 
 func main() {
-	flag.StringVar(&host, "host", "127.0.0.1", "--host=192.168.1.100")
+	flag.StringVar(&host, "host", "192.168.150.100", "--host=192.168.1.100")
 	flag.StringVar(&port, "port", "6667", "--port=6667")
 	flag.StringVar(&user, "user", "root", "--user=root")
 	flag.StringVar(&password, "password", "root", "--password=root")
@@ -56,85 +56,85 @@ func main() {
 
 	defer sessionPool.Close()
 	var wg sync.WaitGroup
-	for i := 0; i < 10000; i++ {
-		var j = i
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			setStorageGroup(fmt.Sprintf("root.ln-%d", j))
-			deleteStorageGroup(fmt.Sprintf("root.ln-%d", j))
-
-		}()
-
-	}
-	setStorageGroup("root.ln1")
-	setStorageGroup("root.ln2")
-	deleteStorageGroups("root.ln1", "root.ln2")
-
-	createTimeseries("root.sg1.dev1.status")
-	deleteTimeseries("root.sg1.dev1.status")
-
-	createMultiTimeseries()
-	deleteTimeseries("root.sg1.dev1.temperature")
-
-	createAlignedTimeseries("root.sg1.dev1", []string{"status", "temperature"}, []string{"sts", "temp"})
-	deleteTimeseries("root.sg1.dev1.status")
-	deleteTimeseries("root.sg1.dev1.temperature")
-
-	insertStringRecord()
-	deleteTimeseries("root.ln.wf02.wt02.hardware")
-
-	insertRecord()
-	deleteTimeseries("root.sg1.dev1.status")
-
-	insertRecords()
-	deleteTimeseries("root.sg1.dev1.status")
-
-	insertTablet()
-
-	deleteTimeseries("root.ln.device1.restart_count", "root.ln.device1.price", "root.ln.device1.tick_count", "root.ln.device1.temperature", "root.ln.device1.description", "root.ln.device1.status")
+	//for i := 0; i < 10000; i++ {
+	//	var j = i
+	//	wg.Add(1)
+	//	go func() {
+	//		defer wg.Done()
+	//		setStorageGroup(fmt.Sprintf("root.ln-%d", j))
+	//		deleteStorageGroup(fmt.Sprintf("root.ln-%d", j))
+	//
+	//	}()
+	//
+	//}
+	//setStorageGroup("root.ln1")
+	//setStorageGroup("root.ln2")
+	//deleteStorageGroups("root.ln1", "root.ln2")
+	//
+	//createTimeseries("root.sg1.dev1.status")
+	//deleteTimeseries("root.sg1.dev1.status")
+	//
+	//createMultiTimeseries()
+	//deleteTimeseries("root.sg1.dev1.temperature")
+	//
+	//createAlignedTimeseries("root.sg1.dev1", []string{"status", "temperature"}, []string{"sts", "temp"})
+	//deleteTimeseries("root.sg1.dev1.status")
+	//deleteTimeseries("root.sg1.dev1.temperature")
+	//
+	//insertStringRecord()
+	//deleteTimeseries("root.ln.wf02.wt02.hardware")
+	//
+	//insertRecord()
+	//deleteTimeseries("root.sg1.dev1.status")
+	//
+	//insertRecords()
+	//deleteTimeseries("root.sg1.dev1.status")
+	//
+	//insertTablet()
+	//
+	//deleteTimeseries("root.ln.device1.restart_count", "root.ln.device1.price", "root.ln.device1.tick_count", "root.ln.device1.temperature", "root.ln.device1.description", "root.ln.device1.status")
 	insertTablets()
-	deleteTimeseries("root.ln.device1.restart_count", "root.ln.device1.price", "root.ln.device1.tick_count", "root.ln.device1.temperature", "root.ln.device1.description", "root.ln.device1.status")
-
-	insertRecord()
-	deleteData()
-
-	setTimeZone()
-	if tz, err := getTimeZone(); err == nil {
-		fmt.Printf("TimeZone: %s\n", tz)
-	} else {
-		fmt.Printf("getTimeZone ERROR: %v\n", err)
-	}
-
-	executeStatement()
-	executeQueryStatement("select count(s3) from root.sg1.dev1")
-	executeRawDataQuery()
-	executeBatchStatement()
-
-	deleteTimeseries("root.sg1.dev1.status")
-	deleteTimeseries("root.ln.wf02.wt02.s5")
-
-	//0.12.x and newer
-	insertRecordsOfOneDevice()
-	deleteTimeseries("root.sg1.dev0.*")
-
-	insertAlignedRecord()
-	deleteTimeseries("root.al1.dev1.*")
-
-	insertAlignedRecords()
-	deleteTimeseries("root.al1.**")
-
-	insertAlignedRecordsOfOneDevice()
-	deleteTimeseries("root.al1.dev4.*")
-
-	deleteStorageGroup("root.ln")
-	insertAlignedTablet()
-	deleteTimeseries("root.ln.device1.*")
-
-	deleteStorageGroup("root.ln")
-	insertAlignedTablets()
-	deleteTimeseries("root.ln.device1.*")
-	executeQueryStatement("show timeseries root.**")
+	//deleteTimeseries("root.ln.device1.restart_count", "root.ln.device1.price", "root.ln.device1.tick_count", "root.ln.device1.temperature", "root.ln.device1.description", "root.ln.device1.status")
+	//
+	//insertRecord()
+	//deleteData()
+	//
+	//setTimeZone()
+	//if tz, err := getTimeZone(); err == nil {
+	//	fmt.Printf("TimeZone: %s\n", tz)
+	//} else {
+	//	fmt.Printf("getTimeZone ERROR: %v\n", err)
+	//}
+	//
+	//executeStatement()
+	//executeQueryStatement("select count(s3) from root.sg1.dev1")
+	//executeRawDataQuery()
+	//executeBatchStatement()
+	//
+	//deleteTimeseries("root.sg1.dev1.status")
+	//deleteTimeseries("root.ln.wf02.wt02.s5")
+	//
+	////0.12.x and newer
+	//insertRecordsOfOneDevice()
+	//deleteTimeseries("root.sg1.dev0.*")
+	//
+	//insertAlignedRecord()
+	//deleteTimeseries("root.al1.dev1.*")
+	//
+	//insertAlignedRecords()
+	//deleteTimeseries("root.al1.**")
+	//
+	//insertAlignedRecordsOfOneDevice()
+	//deleteTimeseries("root.al1.dev4.*")
+	//
+	//deleteStorageGroup("root.ln")
+	//insertAlignedTablet()
+	//deleteTimeseries("root.ln.device1.*")
+	//
+	//deleteStorageGroup("root.ln")
+	//insertAlignedTablets()
+	//deleteTimeseries("root.ln.device1.*")
+	//executeQueryStatement("show timeseries root.**")
 	wg.Wait()
 
 }
@@ -405,6 +405,7 @@ func insertTablet() {
 	if err == nil {
 		if tablet, err := createTablet(12); err == nil {
 			status, err := session.InsertTablet(tablet, false)
+			tablet.Reset()
 			checkError(status, err)
 		} else {
 			log.Fatal(err)
@@ -419,6 +420,7 @@ func insertAlignedTablet() {
 	if err == nil {
 		if tablet, err := createTablet(12); err == nil {
 			status, err := session.InsertAlignedTablet(tablet, false)
+			tablet.Reset()
 			checkError(status, err)
 		} else {
 			log.Fatal(err)
@@ -439,41 +441,29 @@ func createTablet(rowCount int) (*client.Tablet, error) {
 		{
 			Measurement: "restart_count",
 			DataType:    client.INT32,
-			Encoding:    client.RLE,
-			Compressor:  client.SNAPPY,
 		}, {
 			Measurement: "price",
 			DataType:    client.DOUBLE,
-			Encoding:    client.GORILLA,
-			Compressor:  client.SNAPPY,
 		}, {
 			Measurement: "tick_count",
 			DataType:    client.INT64,
-			Encoding:    client.RLE,
-			Compressor:  client.SNAPPY,
 		}, {
 			Measurement: "temperature",
 			DataType:    client.FLOAT,
-			Encoding:    client.GORILLA,
-			Compressor:  client.SNAPPY,
 		}, {
 			Measurement: "description",
 			DataType:    client.TEXT,
-			Encoding:    client.PLAIN,
-			Compressor:  client.SNAPPY,
 		},
 		{
 			Measurement: "status",
 			DataType:    client.BOOLEAN,
-			Encoding:    client.RLE,
-			Compressor:  client.SNAPPY,
 		},
 	}, rowCount)
 
 	if err != nil {
 		return nil, err
 	}
-	ts := time.Now().UTC().UnixNano() / 1000000
+	ts := time.Now().UnixMilli()
 	for row := 0; row < int(rowCount); row++ {
 		ts++
 		tablet.SetTimestamp(ts, row)
@@ -483,6 +473,7 @@ func createTablet(rowCount int) (*client.Tablet, error) {
 		tablet.SetValueAt(rand.Float32(), 3, row)
 		tablet.SetValueAt(fmt.Sprintf("Test Device %d", row+1), 4, row)
 		tablet.SetValueAt(bool(ts%2 == 0), 5, row)
+		tablet.RowSize++
 	}
 	return tablet, nil
 }
@@ -498,10 +489,15 @@ func insertTablets() {
 	}
 
 	tablets := []*client.Tablet{tablet1, tablet2}
+	tablet1.Reset()
+	tablet2.Reset()
 	session, err := sessionPool.GetSession()
 	defer sessionPool.PutBack(session)
 	if err == nil {
 		checkError(session.InsertTablets(tablets, false))
+	}
+	for _, tablet := range tablets {
+		tablet.Reset()
 	}
 
 }
@@ -521,6 +517,9 @@ func insertAlignedTablets() {
 	defer sessionPool.PutBack(session)
 	if err == nil {
 		checkError(session.InsertAlignedTablets(tablets, false))
+	}
+	for _, tablet := range tablets {
+		tablet.Reset()
 	}
 
 }
