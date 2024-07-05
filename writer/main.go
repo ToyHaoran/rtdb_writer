@@ -116,11 +116,13 @@ func HisFastWriteSummary(
 	name string, start time.Time, end time.Time,
 	normalAnalog []WriteSectionInfo, normalDigital []WriteSectionInfo,
 ) {
-	nAll, nCount, nAvg, nMax, nMin, nP99, nP95, nP50, nPNum := Summary(normalAnalog, normalDigital)
 	fmt.Printf("%v - 开始时间: %v, 结束时间: %v\n", name, start.Format(time.RFC3339), end.Format(time.RFC3339))
-	fmt.Printf("总耗时: %v, 断面数量: %v, PNUM数量: %v, 平均耗时: %v,\n\t\t最长耗时: %v, 最短耗时: %v, P99耗时: %v, P95耗时: %v, 中位数耗时: %v\n",
-		nAll, nCount, nPNum, nAvg, nMax, nMin, nP99, nP95, nP50,
-	)
+	if len(normalAnalog) != 0 && len(normalDigital) != 0 {
+		nAll, nCount, nAvg, nMax, nMin, nP99, nP95, nP50, nPNum := Summary(normalAnalog, normalDigital)
+		fmt.Printf("总耗时: %v, 断面数量: %v, PNUM数量: %v, 平均耗时: %v,\n\t\t最长耗时: %v, 最短耗时: %v, P99耗时: %v, P95耗时: %v, 中位数耗时: %v\n",
+			nAll, nCount, nPNum, nAvg, nMax, nMin, nP99, nP95, nP50,
+		)
+	}
 }
 
 func RtFastWriteSummary(
@@ -128,32 +130,40 @@ func RtFastWriteSummary(
 	fastAnalog []WriteSectionInfo, fastDigital []WriteSectionInfo,
 	normalAnalog []WriteSectionInfo, normalDigital []WriteSectionInfo,
 ) {
-	fAll, fCount, fAvg, fMax, fMin, fP99, fP95, fP50, fPNum := Summary(fastAnalog, fastDigital)
-	nAll, nCount, nAvg, nMax, nMin, nP99, nP95, nP50, nPNum := Summary(normalAnalog, normalDigital)
-
 	fmt.Printf("%v - 开始时间: %v, 结束时间: %v\n", name, start.Format(time.RFC3339), end.Format(time.RFC3339))
-	fmt.Printf("写入总耗时: %v\n", fAll+nAll)
-	fmt.Printf("快采点 - 总耗时: %v, 断面数量: %v, PNUM数量: %v, 平均耗时: %v, \n\t\t最长耗时: %v, 最短耗时: %v, P99耗时: %v, P95耗时: %v, 中位数耗时: %v\n",
-		fAll, fCount, fPNum, fAvg, fMax, fMin, fP99, fP95, fP50,
-	)
-	fmt.Printf("普通点 - 总耗时: %v, 断面数量: %v, PNUM数量: %v, 平均耗时: %v, \n\t\t最长耗时: %v, 最短耗时: %v, P99耗时: %v, P95耗时: %v, 中位数耗时: %v\n",
-		nAll, nCount, nPNum, nAvg, nMax, nMin, nP99, nP95, nP50,
-	)
+	all := time.Duration(0)
+	if len(fastAnalog) != 0 && len(fastDigital) != 0 {
+		fAll, fCount, fAvg, fMax, fMin, fP99, fP95, fP50, fPNum := Summary(fastAnalog, fastDigital)
+		fmt.Printf("快采点 - 总耗时: %v, 断面数量: %v, PNUM数量: %v, 平均耗时: %v, \n\t\t最长耗时: %v, 最短耗时: %v, P99耗时: %v, P95耗时: %v, 中位数耗时: %v\n",
+			fAll, fCount, fPNum, fAvg, fMax, fMin, fP99, fP95, fP50,
+		)
+		all += fAll
+	}
+	if len(normalAnalog) != 0 && len(normalDigital) != 0 {
+		nAll, nCount, nAvg, nMax, nMin, nP99, nP95, nP50, nPNum := Summary(normalAnalog, normalDigital)
+		fmt.Printf("普通点 - 总耗时: %v, 断面数量: %v, PNUM数量: %v, 平均耗时: %v, \n\t\t最长耗时: %v, 最短耗时: %v, P99耗时: %v, P95耗时: %v, 中位数耗时: %v\n",
+			nAll, nCount, nPNum, nAvg, nMax, nMin, nP99, nP95, nP50,
+		)
+		all += nAll
+	}
+	fmt.Printf("写入总耗时: %v\n", all)
 }
 
 func PeriodicWriteHisSummary(
 	name string, start time.Time, end time.Time,
 	normalAnalog []WriteSectionInfo, normalDigital []WriteSectionInfo, normalSleepList []time.Duration,
 ) {
-	nAll, nCount, nAvg, nMax, nMin, nP99, nP95, nP50, nPNum := Summary(normalAnalog, normalDigital)
-	nSleepSum := time.Duration(0)
-	for _, d := range normalSleepList {
-		nSleepSum += d
-	}
 	fmt.Printf("%v - 开始时间: %v, 结束时间: %v\n", name, start.Format(time.RFC3339), end.Format(time.RFC3339))
-	fmt.Printf("总耗时: %v, 睡眠耗时: %v, 断面数量: %v, PNUM数量: %v, 平均耗时: %v, \n\t\t最长耗时: %v, 最短耗时: %v, P99耗时: %v, P95耗时: %v, 中位数耗时: %v\n",
-		nAll, nSleepSum, nCount, nPNum, nAvg, nMax, nMin, nP99, nP95, nP50,
-	)
+	if len(normalAnalog) != 0 && len(normalDigital) != 0 {
+		nSleepSum := time.Duration(0)
+		for _, d := range normalSleepList {
+			nSleepSum += d
+		}
+		nAll, nCount, nAvg, nMax, nMin, nP99, nP95, nP50, nPNum := Summary(normalAnalog, normalDigital)
+		fmt.Printf("总耗时: %v, 睡眠耗时: %v, 断面数量: %v, PNUM数量: %v, 平均耗时: %v, \n\t\t最长耗时: %v, 最短耗时: %v, P99耗时: %v, P95耗时: %v, 中位数耗时: %v\n",
+			nAll, nSleepSum, nCount, nPNum, nAvg, nMax, nMin, nP99, nP95, nP50,
+		)
+	}
 }
 
 func PeriodicWriteRtSummary(
@@ -161,23 +171,29 @@ func PeriodicWriteRtSummary(
 	fastAnalog []WriteSectionInfo, fastDigital []WriteSectionInfo, fastSleepList []time.Duration,
 	normalAnalog []WriteSectionInfo, normalDigital []WriteSectionInfo, normalSleepList []time.Duration,
 ) {
-	fAll, fCount, fAvg, fMax, fMin, fP99, fP95, fP50, fPNum := Summary(fastAnalog, fastDigital)
-	nAll, nCount, nAvg, nMax, nMin, nP99, nP95, nP50, nPNum := Summary(normalAnalog, normalDigital)
-	fSleepSum := time.Duration(0)
-	for _, d := range fastSleepList {
-		fSleepSum += d
-	}
-	nSleepSum := time.Duration(0)
-	for _, d := range normalSleepList {
-		nSleepSum += d
-	}
 	fmt.Printf("%v - 开始时间: %v, 结束时间: %v\n", name, start.Format(time.RFC3339), end.Format(time.RFC3339))
-	fmt.Printf("快采点 - 总耗时: %v, 睡眠耗时: %v, 断面数量: %v, PNUM数量: %v, \n\t\t平均耗时: %v ,最长耗时: %v, 最短耗时: %v, P99耗时: %v, P95耗时: %v, 中位数耗时: %v\n",
-		fAll, fSleepSum, fCount, fPNum, fAvg, fMax, fMin, fP99, fP95, fP50,
-	)
-	fmt.Printf("常规点 - 总耗时: %v, 睡眠耗时: %v, 断面数量: %v, PNUM数量: %v, \n\t\t平均耗时: %v ,最长耗时: %v, 最短耗时: %v, P99耗时: %v, P95耗时: %v, 中位数耗时: %v\n",
-		nAll, nSleepSum, nCount, nPNum, nAvg, nMax, nMin, nP99, nP95, nP50,
-	)
+
+	if len(fastAnalog) != 0 && len(fastDigital) != 0 {
+		fAll, fCount, fAvg, fMax, fMin, fP99, fP95, fP50, fPNum := Summary(fastAnalog, fastDigital)
+		fSleepSum := time.Duration(0)
+		for _, d := range fastSleepList {
+			fSleepSum += d
+		}
+		fmt.Printf("快采点 - 总耗时: %v, 睡眠耗时: %v, 断面数量: %v, PNUM数量: %v, \n\t\t平均耗时: %v ,最长耗时: %v, 最短耗时: %v, P99耗时: %v, P95耗时: %v, 中位数耗时: %v\n",
+			fAll, fSleepSum, fCount, fPNum, fAvg, fMax, fMin, fP99, fP95, fP50,
+		)
+	}
+
+	if len(normalAnalog) != 0 && len(normalDigital) != 0 {
+		nSleepSum := time.Duration(0)
+		for _, d := range normalSleepList {
+			nSleepSum += d
+		}
+		nAll, nCount, nAvg, nMax, nMin, nP99, nP95, nP50, nPNum := Summary(normalAnalog, normalDigital)
+		fmt.Printf("常规点 - 总耗时: %v, 睡眠耗时: %v, 断面数量: %v, PNUM数量: %v, \n\t\t平均耗时: %v ,最长耗时: %v, 最短耗时: %v, P99耗时: %v, P95耗时: %v, 中位数耗时: %v\n",
+			nAll, nSleepSum, nCount, nPNum, nAvg, nMax, nMin, nP99, nP95, nP50,
+		)
+	}
 }
 
 type AnalogSection struct {
@@ -922,12 +938,36 @@ func AsyncPeriodicWriteSection(
 					break
 				}
 			}
-			start := time.Now()
-
+			t1 := time.Now()
 			GlobalPlugin.WriteRtAnalogList(unitNumber, analogList)
+			t2 := time.Now()
 			GlobalPlugin.WriteRtDigitalList(unitNumber, digitalList)
+			t3 := time.Now()
+			duration := t3.Sub(t1)
 
-			duration := time.Now().Sub(start)
+			aPCount := 0
+			for _, analog := range analogList {
+				aPCount = aPCount + len(analog.Data)
+			}
+			dPCount := 0
+			for _, digital := range digitalList {
+				dPCount = dPCount + len(digital.Data)
+			}
+			FastAnalogWriteSectionInfoList = append(FastAnalogWriteSectionInfoList, WriteSectionInfo{
+				UnitNumber:   unitNumber,
+				Time:         analogList[0].Time,
+				Duration:     t2.Sub(t1),
+				SectionCount: int64(len(analogList)),
+				PNumCount:    int64(aPCount),
+			})
+			FastDigitalWriteSectionInfoList = append(FastDigitalWriteSectionInfoList, WriteSectionInfo{
+				UnitNumber:   unitNumber,
+				Time:         analogList[0].Time,
+				Duration:     t3.Sub(t2),
+				SectionCount: int64(len(digitalList)),
+				PNumCount:    int64(dPCount),
+			})
+
 			// 全部写完, 退出循环
 			if len(closeChan) == 2 && len(analogCh) == 0 && len(digitalCh) == 0 {
 				break
@@ -1049,15 +1089,98 @@ func StaticWrite(unitNumber int64, analogPath string, digitalPath string) {
 		UnitNumber:   unitNumber,
 		Time:         -1,
 		Duration:     t2.Sub(t1),
-		SectionCount: int64(len(analogSection.Data)),
+		SectionCount: 1,
+		PNumCount:    int64(len(analogSection.Data)),
 	})
 	FastDigitalWriteSectionInfoList = append(FastDigitalWriteSectionInfoList, WriteSectionInfo{
 		UnitNumber:   unitNumber,
 		Time:         -1,
 		Duration:     t3.Sub(t2),
-		SectionCount: int64(len(digitalSection.Data)),
+		SectionCount: 1,
+		PNumCount:    int64(len(digitalSection.Data)),
 	})
 	StaticSummary("静态写入", t1, time.Now(), FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList)
+}
+
+func FastWriteRtOnlyFast(unitNumber int64, fastAnalogCsvPath string, fastDigitalCsvPath string) {
+	// 平滑退出
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	done := make(chan bool, 1)
+	rd1 := make(chan bool, 1)
+	rd2 := make(chan bool, 1)
+	go func() {
+		_ = <-sigs
+		fmt.Println("捕获中断信号, 进行平滑退出处理")
+		done <- true
+		rd1 <- true
+		rd2 <- true
+		fmt.Println("平滑退出信号发送完成")
+	}()
+
+	closeCh := make(chan struct{}, 4)
+	fastAnalogCh := make(chan AnalogSection, CacheSize)
+	fastDigitalCh := make(chan DigitalSection, CacheSize)
+	normalAnalogCh := make(chan AnalogSection, CacheSize)
+	normalDigitalCh := make(chan DigitalSection, CacheSize)
+	wg := new(sync.WaitGroup)
+	wg.Add(4)
+	closeCh <- struct{}{}
+	closeCh <- struct{}{}
+	wg.Done()
+	wg.Done()
+	go ReadAnalogCsv(wg, closeCh, fastAnalogCsvPath, fastAnalogCh, rd1)
+	go ReadDigitalCsv(wg, closeCh, fastDigitalCsvPath, fastDigitalCh, rd2)
+
+	// 睡眠2秒, 等待协程加载缓存
+	time.Sleep(2 * time.Second)
+
+	start := time.Now()
+	FastWriteRealtimeSection(unitNumber, closeCh, fastAnalogCh, fastDigitalCh, normalAnalogCh, normalDigitalCh, done)
+	wg.Wait()
+	end := time.Now()
+
+	RtFastWriteSummary("极速写入实时值", start, end, FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList)
+}
+
+func FastWriteRtOnlyNormal(unitNumber int64, normalAnalogCsvPath string, normalDigitalCsvPath string) {
+	// 平滑退出
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	done := make(chan bool, 1)
+	rd1 := make(chan bool, 1)
+	rd2 := make(chan bool, 1)
+	go func() {
+		_ = <-sigs
+		fmt.Println("捕获中断信号, 进行平滑退出处理")
+		done <- true
+		rd1 <- true
+		rd2 <- true
+		fmt.Println("平滑退出信号发送完成")
+	}()
+
+	closeCh := make(chan struct{}, 4)
+	fastAnalogCh := make(chan AnalogSection, CacheSize)
+	fastDigitalCh := make(chan DigitalSection, CacheSize)
+	normalAnalogCh := make(chan AnalogSection, CacheSize)
+	normalDigitalCh := make(chan DigitalSection, CacheSize)
+	wg := new(sync.WaitGroup)
+	wg.Add(4)
+	wg.Done()
+	wg.Done()
+	closeCh <- struct{}{}
+	closeCh <- struct{}{}
+	go ReadAnalogCsv(wg, closeCh, normalAnalogCsvPath, normalAnalogCh, rd1)
+	go ReadDigitalCsv(wg, closeCh, normalDigitalCsvPath, normalDigitalCh, rd2)
+	// 睡眠2秒, 等待协程加载缓存
+	time.Sleep(2 * time.Second)
+
+	start := time.Now()
+	FastWriteRealtimeSection(unitNumber, closeCh, fastAnalogCh, fastDigitalCh, normalAnalogCh, normalDigitalCh, done)
+	wg.Wait()
+	end := time.Now()
+
+	RtFastWriteSummary("极速写入实时值", start, end, FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList)
 }
 
 // FastWriteRt 极速写入实时值
@@ -1101,6 +1224,112 @@ func FastWriteRt(unitNumber int64, fastAnalogCsvPath string, fastDigitalCsvPath 
 	end := time.Now()
 
 	RtFastWriteSummary("极速写入实时值", start, end, FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList)
+}
+
+func PeriodicWriteRtOnlyFast(unitNumber int64, overloadProtectionFlag bool, fastAnalogCsvPath string, fastDigitalCsvPath string, fastCache bool) {
+	// 平滑退出
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	done1 := make(chan bool, 1)
+	rd1 := make(chan bool, 1)
+	rd2 := make(chan bool, 1)
+	go func() {
+		_ = <-sigs
+		done1 <- true
+		rd1 <- true
+		rd2 <- true
+	}()
+
+	fastCloseCh := make(chan struct{}, 2)
+	fastAnalogCh := make(chan AnalogSection, CacheSize)
+	fastDigitalCh := make(chan DigitalSection, CacheSize)
+	wgRead := new(sync.WaitGroup)
+	wgRead.Add(2)
+	go ReadAnalogCsv(wgRead, fastCloseCh, fastAnalogCsvPath, fastAnalogCh, rd1)
+	go ReadDigitalCsv(wgRead, fastCloseCh, fastDigitalCsvPath, fastDigitalCh, rd2)
+
+	// 睡眠2秒, 等待协程加载缓存
+	time.Sleep(2000 * time.Millisecond)
+	start := time.Now()
+	wgWrite := new(sync.WaitGroup)
+	wgWrite.Add(1)
+	if overloadProtectionFlag {
+		go AsyncPeriodicWriteSection(unitNumber, wgWrite, 0, 0, FastRegularWritePeriodic, fastCloseCh, fastAnalogCh, fastDigitalCh, true, true, fastCache, done1)
+	} else {
+		go AsyncPeriodicWriteSection(unitNumber, wgWrite, 0, 0, FastRegularWritePeriodic, fastCloseCh, fastAnalogCh, fastDigitalCh, true, true, fastCache, done1)
+	}
+	wgWrite.Wait()
+	wgRead.Wait()
+	end := time.Now()
+
+	name := ""
+	if overloadProtectionFlag == true && fastCache == true {
+		name = "周期性写入实时值(开启载保护, 开启快采点缓存)"
+	} else if overloadProtectionFlag == true && fastCache == false {
+		name = "周期性写入实时值(开启载保护, 关闭快采点缓存)"
+	} else if overloadProtectionFlag == false && fastCache == false {
+		name = "周期性写入实时值(关闭载保护, 关闭快采点缓存)"
+	} else if overloadProtectionFlag == false && fastCache == true {
+		name = "周期性写入实时值(关闭载保护, 开启快采点缓存)"
+	}
+
+	PeriodicWriteRtSummary(name, start, end, FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList, FastSleepDurationList, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList, NormalSleepDurationList)
+}
+
+func PeriodicWriteRtOnlyNormal(unitNumber int64, overloadProtectionFlag bool, normalAnalogCsvPath string, normalDigitalCsvPath string, fastCache bool) {
+	// 平滑退出
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	done1 := make(chan bool, 1)
+	done2 := make(chan bool, 1)
+	rd1 := make(chan bool, 1)
+	rd2 := make(chan bool, 1)
+	rd3 := make(chan bool, 1)
+	rd4 := make(chan bool, 1)
+	go func() {
+		_ = <-sigs
+		done1 <- true
+		done2 <- true
+		rd1 <- true
+		rd2 <- true
+		rd3 <- true
+		rd4 <- true
+	}()
+
+	normalCloseCh := make(chan struct{}, 2)
+	normalAnalogCh := make(chan AnalogSection, CacheSize)
+	normalDigitalCh := make(chan DigitalSection, CacheSize)
+	wgRead := new(sync.WaitGroup)
+	wgRead.Add(2)
+	go ReadAnalogCsv(wgRead, normalCloseCh, normalAnalogCsvPath, normalAnalogCh, rd3)
+	go ReadDigitalCsv(wgRead, normalCloseCh, normalDigitalCsvPath, normalDigitalCh, rd4)
+
+	// 睡眠2秒, 等待协程加载缓存
+	time.Sleep(2000 * time.Millisecond)
+	start := time.Now()
+	wgWrite := new(sync.WaitGroup)
+	wgWrite.Add(1)
+	if overloadProtectionFlag {
+		go AsyncPeriodicWriteSection(unitNumber, wgWrite, OverloadProtectionWriteDuration, OverloadProtectionWritePeriodic, NormalRegularWritePeriodic, normalCloseCh, normalAnalogCh, normalDigitalCh, true, false, false, done2)
+	} else {
+		go AsyncPeriodicWriteSection(unitNumber, wgWrite, 0, 0, NormalRegularWritePeriodic, normalCloseCh, normalAnalogCh, normalDigitalCh, true, false, false, done2)
+	}
+	wgWrite.Wait()
+	wgRead.Wait()
+	end := time.Now()
+
+	name := ""
+	if overloadProtectionFlag == true && fastCache == true {
+		name = "周期性写入实时值(开启载保护, 开启快采点缓存)"
+	} else if overloadProtectionFlag == true && fastCache == false {
+		name = "周期性写入实时值(开启载保护, 关闭快采点缓存)"
+	} else if overloadProtectionFlag == false && fastCache == false {
+		name = "周期性写入实时值(关闭载保护, 关闭快采点缓存)"
+	} else if overloadProtectionFlag == false && fastCache == true {
+		name = "周期性写入实时值(关闭载保护, 开启快采点缓存)"
+	}
+
+	PeriodicWriteRtSummary(name, start, end, FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList, FastSleepDurationList, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList, NormalSleepDurationList)
 }
 
 // PeriodicWriteRt 周期性写入实时值
@@ -1153,10 +1382,17 @@ func PeriodicWriteRt(unitNumber int64, overloadProtectionFlag bool, fastAnalogCs
 	wgRead.Wait()
 	end := time.Now()
 
-	name := "周期性写入实时值(关闭过载保护)"
-	if overloadProtectionFlag {
-		name = "周期性写入实时值(开启载保护)"
+	name := ""
+	if overloadProtectionFlag == true && fastCache == true {
+		name = "周期性写入实时值(开启载保护, 开启快采点缓存)"
+	} else if overloadProtectionFlag == true && fastCache == false {
+		name = "周期性写入实时值(开启载保护, 关闭快采点缓存)"
+	} else if overloadProtectionFlag == false && fastCache == false {
+		name = "周期性写入实时值(关闭载保护, 关闭快采点缓存)"
+	} else if overloadProtectionFlag == false && fastCache == true {
+		name = "周期性写入实时值(关闭载保护, 开启快采点缓存)"
 	}
+
 	PeriodicWriteRtSummary(name, start, end, FastAnalogWriteSectionInfoList, FastDigitalWriteSectionInfoList, FastSleepDurationList, NormalAnalogWriteSectionInfoList, NormalDigitalWriteSectionInfoList, NormalSleepDurationList)
 }
 
@@ -1271,7 +1507,7 @@ func (df *WritePlugin) WriteRtAnalog(unitNumber int64, section AnalogSection) {
 
 func (df *WritePlugin) WriteRtAnalogList(unitNumber int64, sections []AnalogSection) {
 	if unitNumber == 1 {
-		df.SyncWriteRtAnalogList(unitNumber, sections)
+		df.SyncWriteRtAnalogList(0, sections)
 	} else {
 		wg := new(sync.WaitGroup)
 		wg.Add(int(unitNumber))
@@ -1284,7 +1520,7 @@ func (df *WritePlugin) WriteRtAnalogList(unitNumber int64, sections []AnalogSect
 
 func (df *WritePlugin) WriteRtDigitalList(unitNumber int64, sections []DigitalSection) {
 	if unitNumber == 1 {
-		df.SyncWriteRtDigitalList(unitNumber, sections)
+		df.SyncWriteRtDigitalList(0, sections)
 	} else {
 		wg := new(sync.WaitGroup)
 		wg.Add(int(unitNumber))
@@ -1533,7 +1769,7 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Rtdb Writer version",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("v0.1.0")
+		fmt.Println("v0.5.3")
 	},
 }
 
@@ -1572,6 +1808,7 @@ var rtFastWrite = &cobra.Command{
 		normalDigitalCsvPath, _ := cmd.Flags().GetString("rt_normal_digital")
 		unitNumber, _ := cmd.Flags().GetInt64("unit_number")
 		param, _ := cmd.Flags().GetString("param")
+		mode, _ := cmd.Flags().GetInt64("mode")
 
 		// 加载动态库
 		InitGlobalPlugin(pluginPath)
@@ -1580,7 +1817,18 @@ var rtFastWrite = &cobra.Command{
 		GlobalPlugin.Login(param)
 
 		// 极速写入实时值
-		FastWriteRt(unitNumber, fastAnalogCsvPath, fastDigitalCsvPath, normalAnalogCsvPath, normalDigitalCsvPath)
+		if mode == 0 {
+			// 写快采 + 普通
+			FastWriteRt(unitNumber, fastAnalogCsvPath, fastDigitalCsvPath, normalAnalogCsvPath, normalDigitalCsvPath)
+		} else if mode == 1 {
+			// 只写快采
+			FastWriteRtOnlyFast(unitNumber, fastAnalogCsvPath, fastDigitalCsvPath)
+		} else if mode == 2 {
+			// 只写普通
+			FastWriteRtOnlyNormal(unitNumber, normalAnalogCsvPath, normalDigitalCsvPath)
+		} else {
+			panic("mode must be 0 or 1 or 2")
+		}
 
 		// 登出
 		GlobalPlugin.Logout()
@@ -1648,6 +1896,7 @@ var rtPeriodicWrite = &cobra.Command{
 		unitNumber, _ := cmd.Flags().GetInt64("unit_number")
 		fastCache, _ := cmd.Flags().GetBool("fast_cache")
 		param, _ := cmd.Flags().GetString("param")
+		mode, _ := cmd.Flags().GetInt64("mode")
 
 		// 加载动态库
 		InitGlobalPlugin(pluginPath)
@@ -1656,7 +1905,15 @@ var rtPeriodicWrite = &cobra.Command{
 		GlobalPlugin.Login(param)
 
 		// 周期性写入
-		PeriodicWriteRt(unitNumber, overloadProtection, fastAnalogCsvPath, fastDigitalCsvPath, normalAnalogCsvPath, normalDigitalCsvPath, fastCache)
+		if mode == 0 {
+			PeriodicWriteRt(unitNumber, overloadProtection, fastAnalogCsvPath, fastDigitalCsvPath, normalAnalogCsvPath, normalDigitalCsvPath, fastCache)
+		} else if mode == 1 {
+			PeriodicWriteRtOnlyFast(unitNumber, overloadProtection, fastAnalogCsvPath, fastDigitalCsvPath, fastCache)
+		} else if mode == 2 {
+			PeriodicWriteRtOnlyNormal(unitNumber, overloadProtection, normalAnalogCsvPath, normalDigitalCsvPath, fastCache)
+		} else {
+			panic("mode must be 0 or 1 or 2")
+		}
 
 		// 登入
 		GlobalPlugin.Logout()
@@ -1683,6 +1940,19 @@ func init() {
 	rtFastWrite.Flags().StringP("rt_normal_digital", "", "", "realtime normal digital csv path")
 	rtFastWrite.Flags().Int64P("unit_number", "", 1, "unit number")
 	rtFastWrite.Flags().StringP("param", "", "", "custom param")
+	rtFastWrite.Flags().Int64("mode", 0, "写入模式: 0表示写快采点+普通点, 1表示只写快采点, 2表示只写普通点")
+
+	rootCmd.AddCommand(rtPeriodicWrite)
+	rtPeriodicWrite.Flags().StringP("plugin", "", "", "plugin path")
+	rtPeriodicWrite.Flags().BoolP("overload_protection", "", false, "overload protection flag")
+	rtPeriodicWrite.Flags().StringP("rt_fast_analog", "", "", "realtime fast analog csv path")
+	rtPeriodicWrite.Flags().StringP("rt_fast_digital", "", "", "realtime fast digital csv path")
+	rtPeriodicWrite.Flags().StringP("rt_normal_analog", "", "", "realtime normal analog csv path")
+	rtPeriodicWrite.Flags().StringP("rt_normal_digital", "", "", "realtime normal digital csv path")
+	rtPeriodicWrite.Flags().Int64P("unit_number", "", 1, "unit number")
+	rtPeriodicWrite.Flags().BoolP("fast_cache", "", false, "fast cache")
+	rtPeriodicWrite.Flags().StringP("param", "", "", "custom param")
+	rtPeriodicWrite.Flags().Int64("mode", 0, "写入模式: 0表示写快采点+普通点, 1表示只写快采点, 2表示只写普通点")
 
 	rootCmd.AddCommand(hisFastWrite)
 	hisFastWrite.Flags().StringP("plugin", "", "", "plugin path")
@@ -1697,17 +1967,6 @@ func init() {
 	hisPeriodicWrite.Flags().StringP("his_normal_digital", "", "", "history normal digital csv path")
 	hisPeriodicWrite.Flags().Int64P("unit_number", "", 1, "unit number")
 	hisPeriodicWrite.Flags().StringP("param", "", "", "custom param")
-
-	rootCmd.AddCommand(rtPeriodicWrite)
-	rtPeriodicWrite.Flags().StringP("plugin", "", "", "plugin path")
-	rtPeriodicWrite.Flags().BoolP("overload_protection", "", false, "overload protection flag")
-	rtPeriodicWrite.Flags().StringP("rt_fast_analog", "", "", "realtime fast analog csv path")
-	rtPeriodicWrite.Flags().StringP("rt_fast_digital", "", "", "realtime fast digital csv path")
-	rtPeriodicWrite.Flags().StringP("rt_normal_analog", "", "", "realtime normal analog csv path")
-	rtPeriodicWrite.Flags().StringP("rt_normal_digital", "", "", "realtime normal digital csv path")
-	rtPeriodicWrite.Flags().Int64P("unit_number", "", 1, "unit number")
-	rtPeriodicWrite.Flags().BoolP("fast_cache", "", false, "fast cache")
-	rtPeriodicWrite.Flags().StringP("param", "", "", "custom param")
 }
 
 func Execute() {
