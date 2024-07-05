@@ -105,7 +105,8 @@ func write_rt_analog(unit_id C.int64_t, time C.int64_t, analog_array_ptr *C.Anal
 	)
 
 	for _, an := range analogs {
-		// path组成：baseRoot.unitID.devID(其中devID是Analog的P_NUM) TODO 设备名是什么要确定一下
+		// TODO 路径问题，设备名是什么要确定一下，还有P_NUM是什么？文档中没有说明。后面的都要处理。
+		// path组成：baseRoot.unitID.devID(其中devID是Analog的P_NUM)
 		devices = append(devices, fmt.Sprintf("%s.unit%d.analogdev", baseRoot, int64(unit_id)))
 		timestamps = append(timestamps, int64(time))
 		measurementss = append(measurementss, []string{"P_NUM", "AV", "AVR", "Q", "BF", "QF", "FAI", "MS", "TEW", "CST"})
@@ -154,7 +155,6 @@ func write_rt_analog_list(unit_id C.int64_t, time *C.int64_t, analog_array_array
 	//for i := int64(0); i < sectionCount; i++ {
 	//	// path组成：baseRoot.unitID.devID(其中devID是Analog的P_NUM)
 	//	devices = fmt.Sprintf("%s.unit%d.dev%d", baseRoot, int64(unit_id), i)
-	//	// TODO 精简代码
 	//	// 构建表头schemas
 	//	measurements := []string{"P_NUM", "AV", "AVR", "Q", "BF", "QF", "FAI", "MS", "TEW", "CST"}
 	//	dataTypes := []client.TSDataType{client.INT32, client.FLOAT, client.FLOAT, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.FLOAT, client.BOOLEAN, client.TEXT, client.INT32}
@@ -403,7 +403,7 @@ func write_static_digital(unit_id C.int64_t, static_digital_array_ptr *C.StaticD
 
 	for _, sd := range staticDigitals {
 		devices = append(devices, fmt.Sprintf("%s.unit%d.dev%d.digital", baseRoot, int64(unit_id), sd.P_NUM))
-		// TODO 同理，没有给时间
+		// TODO 同上，没有给时间
 		timestamps = append(timestamps, time.Now().UnixMilli())
 		measurementss = append(measurementss, []string{"P_NUM", "FACK", "CHN", "PN", "DESC", "UNIT"})
 		dataTypess = append(dataTypess, []client.TSDataType{client.INT32, client.INT32, client.TEXT, client.TEXT, client.TEXT, client.TEXT})
