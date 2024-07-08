@@ -1,0 +1,14 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="极速写入实时点" type="GoApplicationRunConfiguration" factoryName="Go Application">
+    <module name="rtdb_writer" />
+    <working_directory value="$PROJECT_DIR$/writer" />
+    <parameters value="rt_fast_write --plugin=../plugin_example/gowrite_plugin.dll --rt_fast_analog=../CSV20240614/1718350759143_REALTIME_FAST_ANALOG.csv --rt_fast_digital=../CSV20240614/1718350759143_REALTIME_FAST_DIGITAL.csv --rt_normal_analog=../CSV20240614/1718350759143_REALTIME_NORMAL_ANALOG.csv --rt_normal_digital=../CSV20240614/1718350759143_REALTIME_NORMAL_DIGITAL.csv --unit_number=1 --mode=0 --param=rt_fast_write" />
+    <envs>
+      <env name="CGO_ENABLED" value="1" />
+    </envs>
+    <kind value="PACKAGE" />
+    <package value="writer" />
+    <directory value="$PROJECT_DIR$" />
+    <method v="2" />
+  </configuration>
+</component>

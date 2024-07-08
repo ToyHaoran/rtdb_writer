@@ -1,0 +1,14 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="静态点写入" type="GoApplicationRunConfiguration" factoryName="Go Application">
+    <module name="rtdb_writer" />
+    <working_directory value="$PROJECT_DIR$/writer" />
+    <parameters value="static_write --plugin=../plugin_example/gowrite_plugin.dll --static_analog=../CSV20240614/1718350759143_HISTORY_NORMAL_STATIC_ANALOG.csv --static_digital=../CSV20240614/1718350759143_HISTORY_NORMAL_STATIC_DIGITAL.csv --unit_number=5 --param=static_write" />
+    <envs>
+      <env name="CGO_ENABLED" value="1" />
+    </envs>
+    <kind value="PACKAGE" />
+    <package value="writer" />
+    <directory value="$PROJECT_DIR$" />
+    <method v="2" />
+  </configuration>
+</component>

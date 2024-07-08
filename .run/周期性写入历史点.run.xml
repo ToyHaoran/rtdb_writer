@@ -1,0 +1,14 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="周期性写入历史点" type="GoApplicationRunConfiguration" factoryName="Go Application">
+    <module name="rtdb_writer" />
+    <working_directory value="$PROJECT_DIR$/writer" />
+    <parameters value="his_periodic_write --plugin=../plugin_example/gowrite_plugin.dll --his_normal_analog=../CSV20240614/1718350759143_HISTORY_NORMAL_ANALOG.csv --his_normal_digital=../CSV20240614/1718350759143_HISTORY_NORMAL_DIGITAL.csv --unit_number=1 --param=his_periodic_write" />
+    <envs>
+      <env name="CGO_ENABLED" value="1" />
+    </envs>
+    <kind value="PACKAGE" />
+    <package value="writer" />
+    <directory value="$PROJECT_DIR$" />
+    <method v="2" />
+  </configuration>
+</component>
