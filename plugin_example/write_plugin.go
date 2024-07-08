@@ -12,6 +12,8 @@ import (
 	"github.com/apache/iotdb-client-go/client"
 	"github.com/apache/iotdb-client-go/rpc"
 	"log"
+	"strconv"
+	"strings"
 	"time"
 	"unsafe"
 )
@@ -33,12 +35,14 @@ func main() {
 
 //export login
 func login(param *C.char) {
-	fmt.Println("登录数据库")
+	var params []string
+	params = strings.Split(C.GoString(param), ",")
+	fmt.Println("登录数据库，运行" + params[0])
 	startTime = time.Now().UnixMilli()
-	flag.StringVar(&host, "host", "192.168.150.100", "--host=192.168.150.100")
-	flag.StringVar(&port, "port", "6667", "--port=6667")
-	flag.StringVar(&user, "user", "root", "--user=root")
-	flag.StringVar(&password, "password", "root", "--password=root")
+	flag.StringVar(&host, "host", params[1], "--host=127.0.0.1")
+	flag.StringVar(&port, "port", params[2], "--port=6667")
+	flag.StringVar(&user, "user", params[3], "--user=root")
+	flag.StringVar(&password, "password", params[4], "--password=root")
 	flag.Parse()
 	config := &client.PoolConfig{
 		Host:     host,
@@ -46,9 +50,11 @@ func login(param *C.char) {
 		UserName: user,
 		Password: password,
 	}
+	baseRoot = params[6]
 
+	maxSize, _ := strconv.ParseInt(params[5], 10, 64)
 	// 控制session的并发连接数上限，否则可能断开连接
-	sessionPool = client.NewSessionPool(config, 2000, 60000, 600000, false)
+	sessionPool = client.NewSessionPool(config, int(maxSize), 60000, 600000, false)
 }
 
 //export logout

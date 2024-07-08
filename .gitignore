@@ -12,3 +12,6 @@ writer/tests.md
 /plugin_example/gowrite_plugin.h
 /pkg/
 /CSV20240614/
+/.run/
+/writer/vendor/
+/plugin_example/vendor/

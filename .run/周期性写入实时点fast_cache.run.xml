@@ -2,7 +2,7 @@
   <configuration default="false" name="周期性写入实时点fast_cache" type="GoApplicationRunConfiguration" factoryName="Go Application">
     <module name="rtdb_writer" />
     <working_directory value="$PROJECT_DIR$/writer" />
-    <parameters value="rt_periodic_write --plugin=../plugin_example/gowrite_plugin.dll --overload_protection=true --rt_fast_analog=../CSV20240614/1718350759143_REALTIME_FAST_ANALOG.csv --rt_fast_digital=../CSV20240614/1718350759143_REALTIME_FAST_DIGITAL.csv --rt_normal_analog=../CSV20240614/1718350759143_REALTIME_NORMAL_ANALOG.csv --rt_normal_digital=../CSV20240614/1718350759143_REALTIME_NORMAL_DIGITAL.csv --unit_number=2 --fast_cache=true --param=rt_periodic_write" />
+    <parameters value="rt_periodic_write --plugin=../plugin_example/gowrite_plugin.so --overload_protection=true --rt_fast_analog=../CSV20240614/1718350759143_REALTIME_FAST_ANALOG.csv --rt_fast_digital=../CSV20240614/1718350759143_REALTIME_FAST_DIGITAL.csv --rt_normal_analog=../CSV20240614/1718350759143_REALTIME_NORMAL_ANALOG.csv --rt_normal_digital=../CSV20240614/1718350759143_REALTIME_NORMAL_DIGITAL.csv --unit_number=2 --fast_cache=true --param=rt_periodic_write" />
     <envs>
       <env name="CGO_ENABLED" value="1" />
     </envs>
