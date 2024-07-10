@@ -34,7 +34,7 @@ func main() {
 }
 
 //export login
-func login(param *C.char) {
+func login(param *C.char) C.int {
 	var params []string
 	params = strings.Split(C.GoString(param), ",")
 	fmt.Println("登录数据库，运行" + params[0])
@@ -55,6 +55,7 @@ func login(param *C.char) {
 	maxSize, _ := strconv.ParseInt(params[5], 10, 64)
 	// 控制session的并发连接数上限，否则可能断开连接
 	sessionPool = client.NewSessionPool(config, int(maxSize), 60000, 600000, false)
+	return 0
 }
 
 //export logout
@@ -129,7 +130,7 @@ func write_rt_analog(unit_id C.int64_t, time C.int64_t, analog_array_ptr *C.Anal
 	//fmt.Println("写实时模拟量OK")
 }
 
-// 1.1 写实时模拟量断面
+// 1.1 批量写实时模拟量断面
 // unit_id: 机组ID
 // count: 断面数量
 // time: 时间列表, 包含count个时间
@@ -235,7 +236,7 @@ func write_rt_digital(unit_id C.int64_t, time C.int64_t, digital_array_ptr *C.Di
 	//fmt.Println("写实时数字量OK")
 }
 
-// 2.1 写实时数字量
+// 2.1 批量写实时数字量
 // unit_id: 机组ID
 // count: 断面数量
 // time: 时间列表, 包含count个时间
@@ -251,7 +252,7 @@ func write_rt_digital_list(unit_id C.int64_t, time *C.int64_t, digital_array_arr
 	digitalsArray := (*[1 << 30]*C.Digital)(unsafe.Pointer(digital_array_array_ptr))[:sectionCount:sectionCount]
 	arrayCounts := (*[1 << 30]C.int64_t)(unsafe.Pointer(array_count))[:sectionCount:sectionCount]
 
-	var is_fast C.bool
+	var is_fast C.bool // TODO 暂时没用
 	// 直接调用写实时模拟量
 	for i := int64(0); i < sectionCount; i++ {
 		write_rt_digital(unit_id, times[i], digitalsArray[i], arrayCounts[i], is_fast)
@@ -354,11 +355,11 @@ type StaticAnalog struct {
 // unit_id: 机组ID
 // static_analog_array_ptr: 指向静态模拟量数组的指针
 // count: 数组长度
-// is_fast: 当为true时表示写快采点, 当为false时表示写普通点
+// _type: 数据类型, 通过命令行传递, 具体参数用户可自定义, 推荐: 0代表实时快采集点, 1代表实时普通点, 2代表历史普通点
 //
 //export write_static_analog
-func write_static_analog(unit_id C.int64_t, static_analog_array_ptr *C.StaticAnalog, count C.int64_t, is_fast C.bool) {
-	fmt.Println("写静态模拟量start")
+func write_static_analog(unit_id C.int64_t, static_analog_array_ptr *C.StaticAnalog, count C.int64_t, _type C.int64_t) {
+	//fmt.Println("写静态模拟量start")
 	deviceCount := int64(count)
 	staticAnalogs := (*[1 << 30]StaticAnalog)(unsafe.Pointer(static_analog_array_ptr))[:deviceCount:deviceCount]
 
@@ -399,10 +400,10 @@ type StaticDigital struct {
 // unit_id: 机组ID
 // static_digital_array_ptr: 指向静态数字量数组的指针
 // count: 数组长度
-// is_fast: 当为true时表示写快采点, 当为false时表示写普通点
+// _type: 数据类型, 通过命令行传递, 具体参数用户可自定义, 推荐: 0代表实时快采集点, 1代表实时普通点, 2代表历史普通点
 //
 //export write_static_digital
-func write_static_digital(unit_id C.int64_t, static_digital_array_ptr *C.StaticDigital, count C.int64_t, is_fast C.bool) {
+func write_static_digital(unit_id C.int64_t, static_digital_array_ptr *C.StaticDigital, count C.int64_t, _type C.int64_t) {
 	fmt.Println("写静态数字量start")
 	deviceCount := int64(count)
 	staticDigitals := (*[1 << 30]StaticDigital)(unsafe.Pointer(static_digital_array_ptr))[:deviceCount:deviceCount]
