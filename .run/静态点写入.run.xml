@@ -10,6 +10,7 @@
     <kind value="PACKAGE" />
     <package value="writer" />
     <directory value="$PROJECT_DIR$" />
+    <option name="run" value="false" />
     <method v="2" />
   </configuration>
 </component>

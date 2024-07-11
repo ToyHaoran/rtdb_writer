@@ -1,3 +1,6 @@
+//go:build linux
+// +build linux
+
 package main
 
 /*
@@ -26,6 +29,8 @@ var (
 )
 var baseRoot = "root.sg"
 var sessionPool client.SessionPool
+var batchSize int64
+var conMaxSize int64
 var startTime int64
 var endTime int64
 
@@ -50,11 +55,15 @@ func login(param *C.char) C.int {
 		UserName: user,
 		Password: password,
 	}
-	baseRoot = params[6]
 
-	maxSize, _ := strconv.ParseInt(params[5], 10, 64)
+	conMaxSize, _ = strconv.ParseInt(params[5], 10, 32)
+	batchSize, _ = strconv.ParseInt(params[6], 10, 32)
+
+	baseRoot = params[7]
+	fmt.Println(conMaxSize, batchSize, baseRoot)
 	// 控制session的并发连接数上限，否则可能断开连接
-	sessionPool = client.NewSessionPool(config, int(maxSize), 60000, 600000, false)
+	sessionPool = client.NewSessionPool(config, int(conMaxSize), 60000, 60000, false)
+
 	return 0
 }
 
@@ -62,7 +71,7 @@ func login(param *C.char) C.int {
 func logout() {
 	sessionPool.Close()
 	endTime = time.Now().UnixMilli()
-	fmt.Println("登出数据库，结束程序，时间" + fmt.Sprint(endTime-startTime) + "ms")
+	//fmt.Println("登出数据库，结束程序，时间" + fmt.Sprint(endTime-startTime) + "ms")
 }
 
 type Analog struct {
@@ -112,22 +121,36 @@ func write_rt_analog(unit_id C.int64_t, time C.int64_t, analog_array_ptr *C.Anal
 		valuess       [][]interface{}
 	)
 
-	for _, an := range analogs {
-		// TODO 路径问题，设备名是什么要确定一下，还有P_NUM是什么？文档中没有说明。后面的都要处理。
-		// path组成：baseRoot.unitID.devID(其中devID是Analog的P_NUM)
-		devices = append(devices, fmt.Sprintf("%s.unit%d.analogdev", baseRoot, int64(unit_id)))
+	for i, an := range analogs {
+		// path组成：baseRoot.unitID.A(模拟量).devID(其中devID是Analog的P_NUM)
+		devices = append(devices, fmt.Sprintf("%s.unit%d.A%d", baseRoot, int64(unit_id), an.P_NUM))
 		timestamps = append(timestamps, int64(time))
-		measurementss = append(measurementss, []string{"P_NUM", "AV", "AVR", "Q", "BF", "QF", "FAI", "MS", "TEW", "CST"})
-		dataTypess = append(dataTypess, []client.TSDataType{client.INT32, client.FLOAT, client.FLOAT, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.FLOAT, client.BOOLEAN, client.TEXT, client.INT32})
-		valuess = append(valuess, []interface{}{an.P_NUM, an.AV, an.AVR, an.Q, an.BF, an.QF, an.FAI, an.MS, string(an.TEW), int32(an.CST)})
+		measurementss = append(measurementss, []string{"AV", "AVR", "Q", "BF", "QF", "FAI", "MS", "TEW", "CST"})
+		dataTypess = append(dataTypess, []client.TSDataType{client.FLOAT, client.FLOAT, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.FLOAT, client.BOOLEAN, client.TEXT, client.INT32})
+		valuess = append(valuess, []interface{}{an.AV, an.AVR, an.Q, an.BF, an.QF, an.FAI, an.MS, string(an.TEW), int32(an.CST)})
+		if i != 0 && i%int(batchSize) == 0 {
+			session, err := sessionPool.GetSession()
+			if err == nil {
+				checkError(session.InsertRecords(devices, measurementss, dataTypess, valuess, timestamps))
+			}
+			sessionPool.PutBack(session)
 
+			// Clear the batch
+			devices = []string{}
+			timestamps = []int64{}
+			measurementss = [][]string{}
+			dataTypess = [][]client.TSDataType{}
+			valuess = [][]interface{}{}
+		}
 	}
-	session, err := sessionPool.GetSession()
-	if err == nil {
-		checkError(session.InsertRecords(devices, measurementss, dataTypess, valuess, timestamps))
+	if len(timestamps) > 0 {
+		session, err := sessionPool.GetSession()
+		if err == nil {
+			checkError(session.InsertRecords(devices, measurementss, dataTypess, valuess, timestamps))
+		}
+		sessionPool.PutBack(session)
 	}
-	sessionPool.PutBack(session)
-	//fmt.Println("写实时模拟量OK")
+	fmt.Println("写实时模拟量OK，插入" + strconv.Itoa(int(deviceCount)) + "条数据")
 }
 
 // 1.1 批量写实时模拟量断面
@@ -140,7 +163,7 @@ func write_rt_analog(unit_id C.int64_t, time C.int64_t, analog_array_ptr *C.Anal
 //
 //export write_rt_analog_list
 func write_rt_analog_list(unit_id C.int64_t, time *C.int64_t, analog_array_array_ptr **C.Analog, array_count *C.int64_t, count C.int64_t) {
-	fmt.Println("写实时模拟量断面start")
+	//fmt.Println("写实时模拟量断面start")
 	sectionCount := int64(count)
 	times := (*[1 << 30]C.int64_t)(unsafe.Pointer(time))[:sectionCount:sectionCount]
 	analogsArray := (*[1 << 30]*C.Analog)(unsafe.Pointer(analog_array_array_ptr))[:sectionCount:sectionCount]
@@ -196,7 +219,7 @@ func write_rt_analog_list(unit_id C.int64_t, time *C.int64_t, analog_array_array
 	//		checkError(session.InsertTablet(tablet, false))
 	//	}
 	//}
-	fmt.Println("写实时模拟量断面OK")
+	fmt.Println("批量写实时模拟量断面OK")
 }
 
 // 2写实时数字量
@@ -220,20 +243,35 @@ func write_rt_digital(unit_id C.int64_t, time C.int64_t, digital_array_ptr *C.Di
 		valuess       [][]interface{}
 	)
 
-	for _, di := range digitals {
-		// TODO 同理这个设备名也要确定一下
-		devices = append(devices, fmt.Sprintf("%s.unit%d.digitaldev", baseRoot, int64(unit_id)))
+	for i, di := range digitals {
+		devices = append(devices, fmt.Sprintf("%s.unit%d.D%d", baseRoot, int64(unit_id), di.P_NUM))
 		timestamps = append(timestamps, int64(time))
-		measurementss = append(measurementss, []string{"P_NUM", "DV", "DVR", "Q", "BF", "FQ", "FAI", "MS", "TEW", "CST"})
-		dataTypess = append(dataTypess, []client.TSDataType{client.INT32, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.TEXT, client.INT32})
-		valuess = append(valuess, []interface{}{di.P_NUM, di.DV, di.DVR, di.Q, di.BF, di.FQ, di.FAI, di.MS, string(di.TEW), int32(di.CST)})
+		measurementss = append(measurementss, []string{"DV", "DVR", "Q", "BF", "FQ", "FAI", "MS", "TEW", "CST"})
+		dataTypess = append(dataTypess, []client.TSDataType{client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.TEXT, client.INT32})
+		valuess = append(valuess, []interface{}{di.DV, di.DVR, di.Q, di.BF, di.FQ, di.FAI, di.MS, string(di.TEW), int32(di.CST)})
+		if i != 0 && i%int(batchSize) == 0 {
+			session, err := sessionPool.GetSession()
+			if err == nil {
+				checkError(session.InsertRecords(devices, measurementss, dataTypess, valuess, timestamps))
+			}
+			sessionPool.PutBack(session)
+
+			// Clear the batch
+			devices = []string{}
+			timestamps = []int64{}
+			measurementss = [][]string{}
+			dataTypess = [][]client.TSDataType{}
+			valuess = [][]interface{}{}
+		}
 	}
-	session, err := sessionPool.GetSession()
-	defer sessionPool.PutBack(session)
-	if err == nil {
-		checkError(session.InsertRecords(devices, measurementss, dataTypess, valuess, timestamps))
+	if len(devices) > 0 {
+		session, err := sessionPool.GetSession()
+		if err == nil {
+			checkError(session.InsertRecords(devices, measurementss, dataTypess, valuess, timestamps))
+		}
+		sessionPool.PutBack(session)
 	}
-	//fmt.Println("写实时数字量OK")
+	fmt.Println("写实时数字量OK，插入" + strconv.Itoa(int(deviceCount)) + "条数据")
 }
 
 // 2.1 批量写实时数字量
@@ -246,7 +284,7 @@ func write_rt_digital(unit_id C.int64_t, time C.int64_t, digital_array_ptr *C.Di
 //
 //export write_rt_digital_list
 func write_rt_digital_list(unit_id C.int64_t, time *C.int64_t, digital_array_array_ptr **C.Digital, array_count *C.int64_t, count C.int64_t) {
-	fmt.Println("写实时数字量断面start")
+	//fmt.Println("写实时数字量断面start")
 	sectionCount := int64(count)
 	times := (*[1 << 30]C.int64_t)(unsafe.Pointer(time))[:sectionCount:sectionCount]
 	digitalsArray := (*[1 << 30]*C.Digital)(unsafe.Pointer(digital_array_array_ptr))[:sectionCount:sectionCount]
@@ -269,7 +307,7 @@ func write_rt_digital_list(unit_id C.int64_t, time *C.int64_t, digital_array_arr
 //
 //export write_his_analog
 func write_his_analog(unit_id C.int64_t, time C.int64_t, analog_array_ptr *C.Analog, count C.int64_t) {
-	fmt.Println("写历史模拟量start")
+	//fmt.Println("写历史模拟量start")
 	deviceCount := int64(count)
 	analogs := (*[1 << 30]Analog)(unsafe.Pointer(analog_array_ptr))[:deviceCount:deviceCount]
 
@@ -281,19 +319,35 @@ func write_his_analog(unit_id C.int64_t, time C.int64_t, analog_array_ptr *C.Ana
 		valuess       [][]interface{}
 	)
 
-	for _, an := range analogs {
-		devices = append(devices, fmt.Sprintf("%s.unit%d.dev%d.analog", baseRoot, int64(unit_id), an.P_NUM))
+	for i, an := range analogs {
+		devices = append(devices, fmt.Sprintf("%s.unit%d.A%d", baseRoot, int64(unit_id), an.P_NUM))
 		timestamps = append(timestamps, int64(time))
-		measurementss = append(measurementss, []string{"P_NUM", "AV", "AVR", "Q", "BF", "QF", "FAI", "MS", "TEW", "CST"})
-		dataTypess = append(dataTypess, []client.TSDataType{client.INT32, client.FLOAT, client.FLOAT, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.FLOAT, client.BOOLEAN, client.TEXT, client.INT32})
-		valuess = append(valuess, []interface{}{an.P_NUM, an.AV, an.AVR, an.Q, an.BF, an.QF, an.FAI, an.MS, string(an.TEW), int32(an.CST)})
+		measurementss = append(measurementss, []string{"AV", "AVR", "Q", "BF", "QF", "FAI", "MS", "TEW", "CST"})
+		dataTypess = append(dataTypess, []client.TSDataType{client.FLOAT, client.FLOAT, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.FLOAT, client.BOOLEAN, client.TEXT, client.INT32})
+		valuess = append(valuess, []interface{}{an.AV, an.AVR, an.Q, an.BF, an.QF, an.FAI, an.MS, string(an.TEW), int32(an.CST)})
+		if i != 0 && i%int(batchSize) == 0 {
+			session, err := sessionPool.GetSession()
+			if err == nil {
+				checkError(session.InsertRecords(devices, measurementss, dataTypess, valuess, timestamps))
+			}
+			sessionPool.PutBack(session)
+
+			// Clear the batch
+			devices = []string{}
+			timestamps = []int64{}
+			measurementss = [][]string{}
+			dataTypess = [][]client.TSDataType{}
+			valuess = [][]interface{}{}
+		}
 	}
-	session, err := sessionPool.GetSession()
-	if err == nil {
-		checkError(session.InsertRecords(devices, measurementss, dataTypess, valuess, timestamps))
+	if len(devices) > 0 {
+		session, err := sessionPool.GetSession()
+		if err == nil {
+			checkError(session.InsertRecords(devices, measurementss, dataTypess, valuess, timestamps))
+		}
+		sessionPool.PutBack(session)
 	}
-	sessionPool.PutBack(session)
-	fmt.Println("写历史模拟量OK")
+	fmt.Println("写历史模拟量OK，插入" + strconv.Itoa(int(deviceCount)) + "条数据")
 }
 
 // 4写历史数字量
@@ -304,7 +358,7 @@ func write_his_analog(unit_id C.int64_t, time C.int64_t, analog_array_ptr *C.Ana
 //
 //export write_his_digital
 func write_his_digital(unit_id C.int64_t, time C.int64_t, digital_array_ptr *C.Digital, count C.int64_t) {
-	fmt.Println("写历史数字量start")
+	//fmt.Println("写历史数字量start")
 	deviceCount := int64(count)
 	digitals := (*[1 << 30]Digital)(unsafe.Pointer(digital_array_ptr))[:deviceCount:deviceCount]
 
@@ -316,19 +370,35 @@ func write_his_digital(unit_id C.int64_t, time C.int64_t, digital_array_ptr *C.D
 		valuess       [][]interface{}
 	)
 
-	for _, di := range digitals {
-		devices = append(devices, fmt.Sprintf("%s.unit%d.dev%d.digital", baseRoot, int64(unit_id), di.P_NUM))
+	for i, di := range digitals {
+		devices = append(devices, fmt.Sprintf("%s.unit%d.D%d", baseRoot, int64(unit_id), di.P_NUM))
 		timestamps = append(timestamps, int64(time))
-		measurementss = append(measurementss, []string{"P_NUM", "DV", "DVR", "Q", "BF", "FQ", "FAI", "MS", "TEW", "CST"})
-		dataTypess = append(dataTypess, []client.TSDataType{client.INT32, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.TEXT, client.INT32})
-		valuess = append(valuess, []interface{}{di.P_NUM, di.DV, di.DVR, di.Q, di.BF, di.FQ, di.FAI, di.MS, string(di.TEW), int32(di.CST)})
+		measurementss = append(measurementss, []string{"DV", "DVR", "Q", "BF", "FQ", "FAI", "MS", "TEW", "CST"})
+		dataTypess = append(dataTypess, []client.TSDataType{client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.TEXT, client.INT32})
+		valuess = append(valuess, []interface{}{di.DV, di.DVR, di.Q, di.BF, di.FQ, di.FAI, di.MS, string(di.TEW), int32(di.CST)})
+		if i != 0 && i%int(batchSize) == 0 {
+			session, err := sessionPool.GetSession()
+			if err == nil {
+				checkError(session.InsertRecords(devices, measurementss, dataTypess, valuess, timestamps))
+			}
+			sessionPool.PutBack(session)
+
+			// Clear the batch
+			devices = []string{}
+			timestamps = []int64{}
+			measurementss = [][]string{}
+			dataTypess = [][]client.TSDataType{}
+			valuess = [][]interface{}{}
+		}
 	}
-	session, err := sessionPool.GetSession()
-	if err == nil {
-		checkError(session.InsertRecords(devices, measurementss, dataTypess, valuess, timestamps))
+	if len(devices) > 0 {
+		session, err := sessionPool.GetSession()
+		if err == nil {
+			checkError(session.InsertRecords(devices, measurementss, dataTypess, valuess, timestamps))
+		}
+		sessionPool.PutBack(session)
 	}
-	sessionPool.PutBack(session)
-	fmt.Println("写历史数字量OK")
+	fmt.Println("写历史数字量OK，插入" + strconv.Itoa(int(deviceCount)) + "条数据")
 }
 
 type StaticAnalog struct {
@@ -371,20 +441,36 @@ func write_static_analog(unit_id C.int64_t, static_analog_array_ptr *C.StaticAna
 		valuess       [][]interface{}
 	)
 
-	for _, sa := range staticAnalogs {
-		devices = append(devices, fmt.Sprintf("%s.unit%d.dev%d.analog", baseRoot, int64(unit_id), sa.P_NUM))
+	for i, sa := range staticAnalogs {
+		devices = append(devices, fmt.Sprintf("%s.unit%d.A%d", baseRoot, int64(unit_id), sa.P_NUM))
 		// TODO 没有给时间，timestamp取当前时间戳
-		timestamps = append(timestamps, time.Now().UnixMilli())
-		measurementss = append(measurementss, []string{"P_NUM", "TAGT", "FACK", "L4AR", "L3AR", "L2AR", "L1AR", "H4AR", "H3AR", "H2AR", "H1AR", "CHN", "PN", "DESC", "UNIT", "MU", "MD"})
-		dataTypess = append(dataTypess, []client.TSDataType{client.INT32, client.INT32, client.INT32, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.TEXT, client.TEXT, client.TEXT, client.TEXT, client.FLOAT, client.FLOAT})
-		valuess = append(valuess, []interface{}{sa.P_NUM, int32(sa.TAGT), int32(sa.FACK), sa.L4AR, sa.L3AR, sa.L2AR, sa.L1AR, sa.H4AR, sa.H3AR, sa.H2AR, sa.H1AR, string(sa.CHN[:]), string(sa.PN[:]), string(sa.DESC[:]), string(sa.UNIT[:]), sa.MU, sa.MD})
+		timestamps = append(timestamps, int64(sa.P_NUM))
+		measurementss = append(measurementss, []string{"TAGT", "FACK", "L4AR", "L3AR", "L2AR", "L1AR", "H4AR", "H3AR", "H2AR", "H1AR", "CHN", "PN", "DESC", "UNIT", "MU", "MD"})
+		dataTypess = append(dataTypess, []client.TSDataType{client.INT32, client.INT32, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.TEXT, client.TEXT, client.TEXT, client.TEXT, client.FLOAT, client.FLOAT})
+		valuess = append(valuess, []interface{}{int32(sa.TAGT), int32(sa.FACK), sa.L4AR, sa.L3AR, sa.L2AR, sa.L1AR, sa.H4AR, sa.H3AR, sa.H2AR, sa.H1AR, string(sa.CHN[:]), string(sa.PN[:]), string(sa.DESC[:]), string(sa.UNIT[:]), sa.MU, sa.MD})
+		if i != 0 && i%int(batchSize) == 0 {
+			session, err := sessionPool.GetSession()
+			if err == nil {
+				checkError(session.InsertRecords(devices, measurementss, dataTypess, valuess, timestamps))
+			}
+			sessionPool.PutBack(session)
+
+			// Clear the batch
+			devices = []string{}
+			timestamps = []int64{}
+			measurementss = [][]string{}
+			dataTypess = [][]client.TSDataType{}
+			valuess = [][]interface{}{}
+		}
 	}
-	session, err := sessionPool.GetSession()
-	if err == nil {
-		checkError(session.InsertRecords(devices, measurementss, dataTypess, valuess, timestamps))
+	if len(devices) > 0 {
+		session, err := sessionPool.GetSession()
+		if err == nil {
+			checkError(session.InsertRecords(devices, measurementss, dataTypess, valuess, timestamps))
+		}
+		sessionPool.PutBack(session)
 	}
-	sessionPool.PutBack(session)
-	fmt.Println("写静态模拟量OK")
+	fmt.Println("写静态模拟量OK，插入" + strconv.Itoa(int(deviceCount)) + "条数据")
 }
 
 type StaticDigital struct {
@@ -404,7 +490,7 @@ type StaticDigital struct {
 //
 //export write_static_digital
 func write_static_digital(unit_id C.int64_t, static_digital_array_ptr *C.StaticDigital, count C.int64_t, _type C.int64_t) {
-	fmt.Println("写静态数字量start")
+	//fmt.Println("写静态数字量start")
 	deviceCount := int64(count)
 	staticDigitals := (*[1 << 30]StaticDigital)(unsafe.Pointer(static_digital_array_ptr))[:deviceCount:deviceCount]
 
@@ -416,20 +502,36 @@ func write_static_digital(unit_id C.int64_t, static_digital_array_ptr *C.StaticD
 		valuess       [][]interface{}
 	)
 
-	for _, sd := range staticDigitals {
-		devices = append(devices, fmt.Sprintf("%s.unit%d.dev%d.digital", baseRoot, int64(unit_id), sd.P_NUM))
+	for i, sd := range staticDigitals {
+		devices = append(devices, fmt.Sprintf("%s.unit%d.D%d", baseRoot, int64(unit_id), sd.P_NUM))
 		// TODO 同上，没有给时间
-		timestamps = append(timestamps, time.Now().UnixMilli())
-		measurementss = append(measurementss, []string{"P_NUM", "FACK", "CHN", "PN", "DESC", "UNIT"})
-		dataTypess = append(dataTypess, []client.TSDataType{client.INT32, client.INT32, client.TEXT, client.TEXT, client.TEXT, client.TEXT})
-		valuess = append(valuess, []interface{}{sd.P_NUM, int32(sd.FACK), string(sd.CHN[:]), string(sd.PN[:]), string(sd.DESC[:]), string(sd.UNIT[:])})
+		timestamps = append(timestamps, int64(sd.P_NUM))
+		measurementss = append(measurementss, []string{"FACK", "CHN", "PN", "DESC", "UNIT"})
+		dataTypess = append(dataTypess, []client.TSDataType{client.INT32, client.TEXT, client.TEXT, client.TEXT, client.TEXT})
+		valuess = append(valuess, []interface{}{int32(sd.FACK), string(sd.CHN[:]), string(sd.PN[:]), string(sd.DESC[:]), string(sd.UNIT[:])})
+		if i != 0 && i%int(batchSize) == 0 {
+			session, err := sessionPool.GetSession()
+			if err == nil {
+				checkError(session.InsertRecords(devices, measurementss, dataTypess, valuess, timestamps))
+			}
+			sessionPool.PutBack(session)
+
+			// Clear the batch
+			devices = []string{}
+			timestamps = []int64{}
+			measurementss = [][]string{}
+			dataTypess = [][]client.TSDataType{}
+			valuess = [][]interface{}{}
+		}
 	}
-	session, err := sessionPool.GetSession()
-	if err == nil {
-		checkError(session.InsertRecords(devices, measurementss, dataTypess, valuess, timestamps))
+	if len(devices) > 0 {
+		session, err := sessionPool.GetSession()
+		if err == nil {
+			checkError(session.InsertRecords(devices, measurementss, dataTypess, valuess, timestamps))
+		}
+		sessionPool.PutBack(session)
 	}
-	sessionPool.PutBack(session)
-	fmt.Println("写静态数字量OK")
+	fmt.Println("写静态数字量OK，插入" + strconv.Itoa(int(deviceCount)) + "条数据")
 }
 
 func checkError(status *rpc.TSStatus, err error) {
