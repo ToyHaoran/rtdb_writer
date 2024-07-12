@@ -15,3 +15,4 @@ writer/tests.md
 /.run/
 /writer/vendor/
 /plugin_example/vendor/
+/session_example/vendor/
