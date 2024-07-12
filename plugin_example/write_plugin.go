@@ -41,10 +41,19 @@ func main() {
 
 //export login
 func login(param *C.char) C.int {
+	goParam := C.GoString(param)
 	var params []string
-	params = strings.Split(C.GoString(param), ",")
+	params = strings.Split(goParam, ",")
+	if len(params) == 1 {
+		// 使用默认值
+		fmt.Println(fmt.Sprintf("使用默认参数--param=%s,xty111,6667,root,root,1000,5000,root.sg", goParam))
+		params = strings.Split(goParam+",xty111,6667,root,root,1000,5000,root.sg", ",")
+	} else {
+		fmt.Println("参数--param=" + goParam)
+	}
 	fmt.Println("登录数据库，运行" + params[0])
 	startTime = time.Now().UnixMilli()
+	// 使用所给参数
 	flag.StringVar(&host, "host", params[1], "--host=127.0.0.1")
 	flag.StringVar(&port, "port", params[2], "--port=6667")
 	flag.StringVar(&user, "user", params[3], "--user=root")
@@ -61,7 +70,6 @@ func login(param *C.char) C.int {
 	batchSize, _ = strconv.ParseInt(params[6], 10, 32)
 
 	baseRoot = params[7]
-	fmt.Println(conMaxSize, batchSize, baseRoot)
 	// 控制session的并发连接数上限，否则可能断开连接
 	sessionPool = client.NewSessionPool(config, int(conMaxSize), 60000, 60000, false)
 
@@ -76,29 +84,31 @@ func logout() {
 }
 
 type Analog struct {
-	P_NUM int32   // P_NUM, 4Byte
-	AV    float32 // AV, 4Byte
-	AVR   float32 // AVR, 4Byte
-	Q     bool    // Q, 1Byte
-	BF    bool    // BF, 1Byte
-	QF    bool    // QF, 1Byte
-	FAI   float32 // FAI, 4Byte
-	MS    bool    // MS, 1Byte
-	TEW   byte    // TEW, 1Byte
-	CST   uint16  // CST, 2Byte
+	GLOBAL_ID int64   // 全局ID
+	P_NUM     int32   // P_NUM, 4Byte
+	AV        float32 // AV, 4Byte
+	AVR       float32 // AVR, 4Byte
+	Q         bool    // Q, 1Byte
+	BF        bool    // BF, 1Byte
+	QF        bool    // QF, 1Byte
+	FAI       float32 // FAI, 4Byte
+	MS        bool    // MS, 1Byte
+	TEW       byte    // TEW, 1Byte
+	CST       uint16  // CST, 2Byte
 }
 
 type Digital struct {
-	P_NUM int32  // P_NUM, 4Byte
-	DV    bool   // DV, 1Byte
-	DVR   bool   // DVR, 1Byte
-	Q     bool   // Q, 1Byte
-	BF    bool   // BF, 1Byte
-	FQ    bool   // FQ, 1Byte
-	FAI   bool   // FAI, 1Byte
-	MS    bool   // MS, 1Byte
-	TEW   byte   // TEW, 1Byte
-	CST   uint16 // CST, 2Byte
+	GLOBAL_ID int64  // 全局ID
+	P_NUM     int32  // P_NUM, 4Byte
+	DV        bool   // DV, 1Byte
+	DVR       bool   // DVR, 1Byte
+	Q         bool   // Q, 1Byte
+	BF        bool   // BF, 1Byte
+	FQ        bool   // FQ, 1Byte
+	FAI       bool   // FAI, 1Byte
+	MS        bool   // MS, 1Byte
+	TEW       byte   // TEW, 1Byte
+	CST       uint16 // CST, 2Byte
 }
 
 // insertRecords 普通插入
@@ -111,6 +121,7 @@ func insertRecords(devices *[]string, timestamps *[]int64, measurementss *[][]st
 }
 
 // 1写实时模拟量
+// magic: 魔数, 用于标记测试数据集
 // unit_id: 机组ID
 // time: 断面时间戳
 // analog_array_ptr: 指向模拟量数组的指针
@@ -118,7 +129,7 @@ func insertRecords(devices *[]string, timestamps *[]int64, measurementss *[][]st
 // is_fast: 当为true时表示写快采点, 当为false时表示写普通点
 //
 //export write_rt_analog
-func write_rt_analog(unit_id C.int64_t, time C.int64_t, analog_array_ptr *C.Analog, count C.int64_t, is_fast C.bool) {
+func write_rt_analog(magic C.int32_t, unit_id C.int64_t, time C.int64_t, analog_array_ptr *C.Analog, count C.int64_t, is_fast C.bool) {
 	//fmt.Println("写实时模拟量start")
 	deviceCount := int64(count)
 	analogs := (*[1 << 30]Analog)(unsafe.Pointer(analog_array_ptr))[:deviceCount:deviceCount]
@@ -164,7 +175,7 @@ func write_rt_analog(unit_id C.int64_t, time C.int64_t, analog_array_ptr *C.Anal
 // 备注: 只有写快采点的时候会调用此接口
 //
 //export write_rt_analog_list
-func write_rt_analog_list(unit_id C.int64_t, time *C.int64_t, analog_array_array_ptr **C.Analog, array_count *C.int64_t, count C.int64_t) {
+func write_rt_analog_list(magic C.int32_t, unit_id C.int64_t, time *C.int64_t, analog_array_array_ptr **C.Analog, array_count *C.int64_t, count C.int64_t) {
 	//fmt.Println("写实时模拟量断面start")
 	sectionCount := int64(count)
 	times := (*[1 << 30]C.int64_t)(unsafe.Pointer(time))[:sectionCount:sectionCount]
@@ -175,10 +186,10 @@ func write_rt_analog_list(unit_id C.int64_t, time *C.int64_t, analog_array_array
 	var wg sync.WaitGroup
 	for i := int64(0); i < sectionCount; i++ {
 		wg.Add(1)
-		go func(unit_id C.int64_t, time C.int64_t, analog_array_ptr *C.Analog, count C.int64_t, is_fast C.bool) {
-			write_rt_analog(unit_id, time, analog_array_ptr, count, is_fast)
+		go func(time C.int64_t, analog_array_ptr *C.Analog, count C.int64_t) {
+			write_rt_analog(magic, unit_id, time, analog_array_ptr, count, true)
 			wg.Done()
-		}(unit_id, times[i], analogsArray[i], arrayCounts[i], true)
+		}(times[i], analogsArray[i], arrayCounts[i])
 
 	}
 	wg.Wait()
@@ -240,7 +251,7 @@ func write_rt_analog_list(unit_id C.int64_t, time *C.int64_t, analog_array_array
 // is_fast: 当为true时表示写快采点, 当为false时表示写普通点
 //
 //export write_rt_digital
-func write_rt_digital(unit_id C.int64_t, time C.int64_t, digital_array_ptr *C.Digital, count C.int64_t, is_fast C.bool) {
+func write_rt_digital(magic C.int32_t, unit_id C.int64_t, time C.int64_t, digital_array_ptr *C.Digital, count C.int64_t, is_fast C.bool) {
 	//fmt.Println("写实时数字量start")
 	deviceCount := int64(count)
 	digitals := (*[1 << 30]Digital)(unsafe.Pointer(digital_array_ptr))[:deviceCount:deviceCount]
@@ -285,7 +296,7 @@ func write_rt_digital(unit_id C.int64_t, time C.int64_t, digital_array_ptr *C.Di
 // 备注: 只有写快采点的时候会调用此接口
 //
 //export write_rt_digital_list
-func write_rt_digital_list(unit_id C.int64_t, time *C.int64_t, digital_array_array_ptr **C.Digital, array_count *C.int64_t, count C.int64_t) {
+func write_rt_digital_list(magic C.int32_t, unit_id C.int64_t, time *C.int64_t, digital_array_array_ptr **C.Digital, array_count *C.int64_t, count C.int64_t) {
 	//fmt.Println("写实时数字量断面start")
 	sectionCount := int64(count)
 	times := (*[1 << 30]C.int64_t)(unsafe.Pointer(time))[:sectionCount:sectionCount]
@@ -296,10 +307,10 @@ func write_rt_digital_list(unit_id C.int64_t, time *C.int64_t, digital_array_arr
 	var wg sync.WaitGroup
 	for i := int64(0); i < sectionCount; i++ {
 		wg.Add(1)
-		go func(unit_id C.int64_t, time C.int64_t, digital_array_ptr *C.Digital, count C.int64_t, is_fast C.bool) {
-			write_rt_digital(unit_id, time, digital_array_ptr, count, is_fast)
+		go func(time C.int64_t, digital_array_ptr *C.Digital, count C.int64_t) {
+			write_rt_digital(magic, unit_id, time, digital_array_ptr, count, true)
 			wg.Done()
-		}(unit_id, times[i], digitalsArray[i], arrayCounts[i], true)
+		}(times[i], digitalsArray[i], arrayCounts[i])
 
 	}
 	wg.Wait()
@@ -314,7 +325,7 @@ func write_rt_digital_list(unit_id C.int64_t, time *C.int64_t, digital_array_arr
 // count: 数组长度
 //
 //export write_his_analog
-func write_his_analog(unit_id C.int64_t, time C.int64_t, analog_array_ptr *C.Analog, count C.int64_t) {
+func write_his_analog(magic C.int32_t, unit_id C.int64_t, time C.int64_t, analog_array_ptr *C.Analog, count C.int64_t) {
 	//fmt.Println("写历史模拟量start")
 	deviceCount := int64(count)
 	analogs := (*[1 << 30]Analog)(unsafe.Pointer(analog_array_ptr))[:deviceCount:deviceCount]
@@ -355,7 +366,7 @@ func write_his_analog(unit_id C.int64_t, time C.int64_t, analog_array_ptr *C.Ana
 // count: 数组长度
 //
 //export write_his_digital
-func write_his_digital(unit_id C.int64_t, time C.int64_t, digital_array_ptr *C.Digital, count C.int64_t) {
+func write_his_digital(magic C.int32_t, unit_id C.int64_t, time C.int64_t, digital_array_ptr *C.Digital, count C.int64_t) {
 	//fmt.Println("写历史数字量start")
 	deviceCount := int64(count)
 	digitals := (*[1 << 30]Digital)(unsafe.Pointer(digital_array_ptr))[:deviceCount:deviceCount]
@@ -391,23 +402,24 @@ func write_his_digital(unit_id C.int64_t, time C.int64_t, digital_array_ptr *C.D
 }
 
 type StaticAnalog struct {
-	P_NUM int32     // P_NUM, 4Byte
-	TAGT  uint16    // TAGT, 1Byte
-	FACK  uint16    // FACK, 1Byte
-	L4AR  bool      // L4AR, 1Byte
-	L3AR  bool      // L3AR, 1Byte
-	L2AR  bool      // L2AR, 1Byte
-	L1AR  bool      // L1AR, 1Byte
-	H4AR  bool      // H4AR, 1Byte
-	H3AR  bool      // H3AR, 1Byte
-	H2AR  bool      // H2AR, 1Byte
-	H1AR  bool      // H1AR, 1Byte
-	CHN   [32]byte  // CHN, 32Byte
-	PN    [32]byte  // PN, 32Byte
-	DESC  [128]byte // DESC, 128Byte
-	UNIT  [32]byte  // UNIT, 32Byte
-	MU    float32   // MU, 4Byte
-	MD    float32   // MD, 4Byte
+	GLOBAL_ID int64     // 全局ID
+	P_NUM     int32     // P_NUM, 4Byte
+	TAGT      uint16    // TAGT, 1Byte
+	FACK      uint16    // FACK, 1Byte
+	L4AR      bool      // L4AR, 1Byte
+	L3AR      bool      // L3AR, 1Byte
+	L2AR      bool      // L2AR, 1Byte
+	L1AR      bool      // L1AR, 1Byte
+	H4AR      bool      // H4AR, 1Byte
+	H3AR      bool      // H3AR, 1Byte
+	H2AR      bool      // H2AR, 1Byte
+	H1AR      bool      // H1AR, 1Byte
+	CHN       [32]byte  // CHN, 32Byte
+	PN        [32]byte  // PN, 32Byte
+	DESC      [128]byte // DESC, 128Byte
+	UNIT      [32]byte  // UNIT, 32Byte
+	MU        float32   // MU, 4Byte
+	MD        float32   // MD, 4Byte
 }
 
 // 5写静态模拟量
@@ -417,7 +429,7 @@ type StaticAnalog struct {
 // _type: 数据类型, 通过命令行传递, 具体参数用户可自定义, 推荐: 0代表实时快采集点, 1代表实时普通点, 2代表历史普通点
 //
 //export write_static_analog
-func write_static_analog(unit_id C.int64_t, static_analog_array_ptr *C.StaticAnalog, count C.int64_t, _type C.int64_t) {
+func write_static_analog(magic C.int32_t, unit_id C.int64_t, static_analog_array_ptr *C.StaticAnalog, count C.int64_t, _type C.int64_t) {
 	//fmt.Println("写静态模拟量start")
 	deviceCount := int64(count)
 	staticAnalogs := (*[1 << 30]StaticAnalog)(unsafe.Pointer(static_analog_array_ptr))[:deviceCount:deviceCount]
@@ -432,7 +444,7 @@ func write_static_analog(unit_id C.int64_t, static_analog_array_ptr *C.StaticAna
 
 	for i, sa := range staticAnalogs {
 		devices = append(devices, fmt.Sprintf("%s.unit%d.A%d", baseRoot, int64(unit_id), sa.P_NUM))
-		// TODO 没有给时间，timestamp取当前时间戳
+		// TODO 没有给时间，timestamp取当前时间戳，可以单独放个测点用来保存这些属性
 		timestamps = append(timestamps, int64(sa.P_NUM))
 		measurementss = append(measurementss, []string{"TAGT", "FACK", "L4AR", "L3AR", "L2AR", "L1AR", "H4AR", "H3AR", "H2AR", "H1AR", "CHN", "PN", "DESC", "UNIT", "MU", "MD"})
 		dataTypess = append(dataTypess, []client.TSDataType{client.INT32, client.INT32, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.TEXT, client.TEXT, client.TEXT, client.TEXT, client.FLOAT, client.FLOAT})
@@ -454,12 +466,13 @@ func write_static_analog(unit_id C.int64_t, static_analog_array_ptr *C.StaticAna
 }
 
 type StaticDigital struct {
-	P_NUM int32     // P_NUM, 4Byte
-	FACK  uint16    // FACK, 2Byte
-	CHN   [32]byte  // CHN, 32Byte
-	PN    [32]byte  // PN, 32Byte
-	DESC  [128]byte // DESC, 128Byte
-	UNIT  [32]byte  // UNIT, 32Byte
+	GLOBAL_ID int64     // 全局ID
+	P_NUM     int32     // P_NUM, 4Byte
+	FACK      uint16    // FACK, 2Byte
+	CHN       [32]byte  // CHN, 32Byte
+	PN        [32]byte  // PN, 32Byte
+	DESC      [128]byte // DESC, 128Byte
+	UNIT      [32]byte  // UNIT, 32Byte
 }
 
 // 6写静态数字量
@@ -469,7 +482,7 @@ type StaticDigital struct {
 // _type: 数据类型, 通过命令行传递, 具体参数用户可自定义, 推荐: 0代表实时快采集点, 1代表实时普通点, 2代表历史普通点
 //
 //export write_static_digital
-func write_static_digital(unit_id C.int64_t, static_digital_array_ptr *C.StaticDigital, count C.int64_t, _type C.int64_t) {
+func write_static_digital(magic C.int32_t, unit_id C.int64_t, static_digital_array_ptr *C.StaticDigital, count C.int64_t, _type C.int64_t) {
 	//fmt.Println("写静态数字量start")
 	deviceCount := int64(count)
 	staticDigitals := (*[1 << 30]StaticDigital)(unsafe.Pointer(static_digital_array_ptr))[:deviceCount:deviceCount]
