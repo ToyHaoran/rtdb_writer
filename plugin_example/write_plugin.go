@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"github.com/apache/iotdb-client-go/client"
 	"github.com/apache/iotdb-client-go/rpc"
+	"github.com/panjf2000/ants/v2"
 	"log"
 	"strconv"
 	"strings"
@@ -34,6 +35,9 @@ var batchSize int64
 var conMaxSize int64
 var startTime int64
 var endTime int64
+
+var wg sync.WaitGroup // go协程池用
+var threadPool *ants.PoolWithFunc
 
 func main() {
 	// Need a main function to make CGO compile package as C shared library
@@ -73,11 +77,21 @@ func login(param *C.char) C.int {
 	// 控制session的并发连接数上限，否则可能断开连接
 	sessionPool = client.NewSessionPool(config, int(conMaxSize), 60000, 60000, false)
 
+	threadPool, _ = ants.NewPoolWithFunc(
+		int(conMaxSize),
+		func(i interface{}) {
+			insertData(i.(Data))
+			wg.Done()
+		},
+		ants.WithPreAlloc(true))
+
 	return 0
 }
 
 //export logout
 func logout() {
+	wg.Wait()
+	threadPool.Release()
 	sessionPool.Close()
 	endTime = time.Now().UnixMilli()
 	fmt.Println("登出数据库，结束程序，耗时" + fmt.Sprint(endTime-startTime) + "ms")
@@ -111,13 +125,47 @@ type Digital struct {
 	CST       uint16 // CST, 2Byte
 }
 
-// insertRecords 普通插入
-func insertRecords(devices *[]string, timestamps *[]int64, measurementss *[][]string, dataTypess *[][]client.TSDataType, valuess *[][]interface{}) {
+// insertData 封装后插入
+func insertData(data Data) {
 	session, err := sessionPool.GetSession()
 	if err == nil {
-		checkError(session.InsertRecords(*devices, *measurementss, *dataTypess, *valuess, *timestamps))
+		checkError(session.InsertRecords(data.devices, data.measurementss, data.dataTypess, data.valuess, data.timestamps))
 	}
 	sessionPool.PutBack(session)
+}
+
+// insertRecords 普通插入
+func insertRecords(devices []string, timestamps []int64, measurementss [][]string, dataTypess [][]client.TSDataType, valuess [][]interface{}) {
+	session, err := sessionPool.GetSession()
+	if err == nil {
+		checkError(session.InsertRecords(devices, measurementss, dataTypess, valuess, timestamps))
+	}
+	sessionPool.PutBack(session)
+}
+
+// sumaryString 统计输出信息
+func sumaryString(deviceCount int, isFast C.bool, isAnalog bool) string {
+	var name string
+	var analogOrDigital string
+	if isFast {
+		name = "快采点"
+	} else {
+		name = "普通点"
+	}
+	if isAnalog {
+		analogOrDigital = "模拟量"
+	} else {
+		analogOrDigital = "数字量"
+	}
+	return fmt.Sprintf("%s 写实时 %s OK，插入 %d 条数据，即IoTDB中的 %d 测点", name, analogOrDigital, deviceCount, deviceCount*9)
+}
+
+type Data struct {
+	devices       []string
+	timestamps    []int64
+	measurementss [][]string
+	dataTypess    [][]client.TSDataType
+	valuess       [][]interface{}
 }
 
 // 1写实时模拟量
@@ -129,41 +177,61 @@ func insertRecords(devices *[]string, timestamps *[]int64, measurementss *[][]st
 // is_fast: 当为true时表示写快采点, 当为false时表示写普通点
 //
 //export write_rt_analog
-func write_rt_analog(magic C.int32_t, unit_id C.int64_t, time C.int64_t, analog_array_ptr *C.Analog, count C.int64_t, is_fast C.bool) {
+func write_rt_analog(magic C.int32_t, unit_id C.int64_t, timestamp C.int64_t, analog_array_ptr *C.Analog, count C.int64_t, is_fast C.bool) {
 	//fmt.Println("写实时模拟量start")
 	deviceCount := int64(count)
 	analogs := (*[1 << 30]Analog)(unsafe.Pointer(analog_array_ptr))[:deviceCount:deviceCount]
 
-	var (
-		devices       []string
-		timestamps    []int64
-		measurementss [][]string
-		dataTypess    [][]client.TSDataType
-		valuess       [][]interface{}
-	)
-
-	for i, an := range analogs {
-		// path组成：baseRoot.unitID.A(模拟量).devID(其中devID是Analog的P_NUM)
-		devices = append(devices, fmt.Sprintf("%s.unit%d.A%d", baseRoot, int64(unit_id), an.P_NUM))
-		timestamps = append(timestamps, int64(time))
-		measurementss = append(measurementss, []string{"AV", "AVR", "Q", "BF", "QF", "FAI", "MS", "TEW", "CST"})
-		dataTypess = append(dataTypess, []client.TSDataType{client.FLOAT, client.FLOAT, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.FLOAT, client.BOOLEAN, client.TEXT, client.INT32})
-		valuess = append(valuess, []interface{}{an.AV, an.AVR, an.Q, an.BF, an.QF, an.FAI, an.MS, string(an.TEW), int32(an.CST)})
-		if i != 0 && i%int(batchSize) == 0 {
-			// 这里没法并发，因为要清空批数据
-			insertRecords(&devices, &timestamps, &measurementss, &dataTypess, &valuess)
-			devices = []string{}
-			timestamps = []int64{}
-			measurementss = [][]string{}
-			dataTypess = [][]client.TSDataType{}
-			valuess = [][]interface{}{}
+	d := Data{
+		devices:       nil,
+		timestamps:    nil,
+		measurementss: nil,
+		dataTypess:    nil,
+		valuess:       nil,
+	}
+	if is_fast {
+		for _, an := range analogs {
+			// path组成：baseRoot.unitID.A(模拟量).devID(其中devID是Analog的P_NUM)
+			d.devices = append(d.devices, fmt.Sprintf("%s.unit%d.A%d", baseRoot, int64(unit_id), an.P_NUM))
+			d.timestamps = append(d.timestamps, int64(timestamp))
+			d.measurementss = append(d.measurementss, []string{"AV", "AVR", "Q", "BF", "QF", "FAI", "MS", "TEW", "CST"})
+			d.dataTypess = append(d.dataTypess, []client.TSDataType{client.FLOAT, client.FLOAT, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.FLOAT, client.BOOLEAN, client.TEXT, client.INT32})
+			d.valuess = append(d.valuess, []interface{}{an.AV, an.AVR, an.Q, an.BF, an.QF, an.FAI, an.MS, string(an.TEW), int32(an.CST)})
+		}
+		// 快采点数据量少，直接写就行，但要控制连接数
+		wg.Add(1)
+		threadPool.Invoke(d)
+	} else {
+		for i, an := range analogs {
+			// path组成：baseRoot.unitID.A(模拟量).devID(其中devID是Analog的P_NUM)
+			d.devices = append(d.devices, fmt.Sprintf("%s.unit%d.A%d", baseRoot, int64(unit_id), an.P_NUM))
+			d.timestamps = append(d.timestamps, int64(timestamp))
+			d.measurementss = append(d.measurementss, []string{"AV", "AVR", "Q", "BF", "QF", "FAI", "MS", "TEW", "CST"})
+			d.dataTypess = append(d.dataTypess, []client.TSDataType{client.FLOAT, client.FLOAT, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.FLOAT, client.BOOLEAN, client.TEXT, client.INT32})
+			d.valuess = append(d.valuess, []interface{}{an.AV, an.AVR, an.Q, an.BF, an.QF, an.FAI, an.MS, string(an.TEW), int32(an.CST)})
+			if i != 0 && i%int(batchSize) == 0 {
+				// 普通点数据量巨大，并行写
+				// 写实时模拟量OK，插入59850条数据，约60万测点
+				wg.Add(1)
+				threadPool.Invoke(d)
+				time.Sleep(time.Millisecond * 1) // 避免运行太快每行数据长度不一致
+				// 清空数据
+				d = Data{
+					devices:       nil,
+					timestamps:    nil,
+					measurementss: nil,
+					dataTypess:    nil,
+					valuess:       nil,
+				}
+			}
+		}
+		if len(d.timestamps) > 0 {
+			insertData(d)
 		}
 	}
+	//wg.Wait()
+	fmt.Println(sumaryString(int(deviceCount), is_fast, true))
 
-	if len(timestamps) > 0 {
-		insertRecords(&devices, &timestamps, &measurementss, &dataTypess, &valuess)
-	}
-	fmt.Println("写实时模拟量OK，插入" + strconv.Itoa(int(deviceCount)) + "条数据")
 }
 
 // 1.1 批量写实时模拟量断面
@@ -182,17 +250,46 @@ func write_rt_analog_list(magic C.int32_t, unit_id C.int64_t, time *C.int64_t, a
 	analogsArray := (*[1 << 30]*C.Analog)(unsafe.Pointer(analog_array_array_ptr))[:sectionCount:sectionCount]
 	arrayCounts := (*[1 << 30]C.int64_t)(unsafe.Pointer(array_count))[:sectionCount:sectionCount]
 
-	//方式1：直接调用写实时模拟量函数，insertRecords
-	var wg sync.WaitGroup
-	for i := int64(0); i < sectionCount; i++ {
-		wg.Add(1)
-		go func(time C.int64_t, analog_array_ptr *C.Analog, count C.int64_t) {
-			write_rt_analog(magic, unit_id, time, analog_array_ptr, count, true)
-			wg.Done()
-		}(times[i], analogsArray[i], arrayCounts[i])
-
+	d := Data{
+		devices:       nil,
+		timestamps:    nil,
+		measurementss: nil,
+		dataTypess:    nil,
+		valuess:       nil,
 	}
-	wg.Wait()
+	tempCount := int64(0)  // 用来统计处理了多少条数据，然后每batchsize插入一次
+	totalCount := int64(0) // 总共多少条数据
+	for i := int64(0); i < sectionCount; i++ {
+		deviceCount := int64(arrayCounts[i])
+		tempCount += deviceCount
+		analogs := (*[1 << 30]Analog)(unsafe.Pointer(analogsArray[i]))[:deviceCount:deviceCount]
+		for _, an := range analogs {
+			// path组成：baseRoot.unitID.A(模拟量).devID(其中devID是Analog的P_NUM)
+			d.devices = append(d.devices, fmt.Sprintf("%s.unit%d.A%d", baseRoot, int64(unit_id), an.P_NUM))
+			d.timestamps = append(d.timestamps, int64(times[i]))
+			d.measurementss = append(d.measurementss, []string{"AV", "AVR", "Q", "BF", "QF", "FAI", "MS", "TEW", "CST"})
+			d.dataTypess = append(d.dataTypess, []client.TSDataType{client.FLOAT, client.FLOAT, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.FLOAT, client.BOOLEAN, client.TEXT, client.INT32})
+			d.valuess = append(d.valuess, []interface{}{an.AV, an.AVR, an.Q, an.BF, an.QF, an.FAI, an.MS, string(an.TEW), int32(an.CST)})
+		}
+		if tempCount > batchSize {
+			wg.Add(1)
+			threadPool.Invoke(d)
+			d = Data{
+				devices:       nil,
+				timestamps:    nil,
+				measurementss: nil,
+				dataTypess:    nil,
+				valuess:       nil,
+			}
+			totalCount += tempCount
+			tempCount = 0
+		}
+	}
+	if len(d.timestamps) > 0 {
+		totalCount += int64(len(d.timestamps))
+		insertData(d)
+	}
+	fmt.Println("批量写实时模拟量断面OK", sumaryString(int(totalCount), true, true))
 
 	// TODO 是否可以用Tables？（以IOTDB概念为主）输入的数据是n个设备的一条数据，使用Table需要一个设备的n条数据，
 	// TODO 需要analogsArray[i].P_NUM读取设备，需要遍历每个Analog，与P_NUM进行比较，构建Table，而且传输的数据P_NUM是否是有序的？
@@ -234,13 +331,8 @@ func write_rt_analog_list(magic C.int32_t, unit_id C.int64_t, time *C.int64_t, a
 	//		tablet.SetValueAt(string(analogs[i].TEW), 8, row)
 	//		tablet.SetValueAt(int32(analogs[i].CST), 9, row)
 	//	}
-	//	session, err := sessionPool.GetSession()
-	//	defer sessionPool.PutBack(session)
-	//	if err == nil {
-	//		checkError(session.InsertTablet(tablet, false))
-	//	}
 	//}
-	fmt.Println("批量写实时模拟量断面OK")
+
 }
 
 // 2写实时数字量
@@ -251,40 +343,57 @@ func write_rt_analog_list(magic C.int32_t, unit_id C.int64_t, time *C.int64_t, a
 // is_fast: 当为true时表示写快采点, 当为false时表示写普通点
 //
 //export write_rt_digital
-func write_rt_digital(magic C.int32_t, unit_id C.int64_t, time C.int64_t, digital_array_ptr *C.Digital, count C.int64_t, is_fast C.bool) {
+func write_rt_digital(magic C.int32_t, unit_id C.int64_t, timestamp C.int64_t, digital_array_ptr *C.Digital, count C.int64_t, is_fast C.bool) {
 	//fmt.Println("写实时数字量start")
 	deviceCount := int64(count)
 	digitals := (*[1 << 30]Digital)(unsafe.Pointer(digital_array_ptr))[:deviceCount:deviceCount]
 
-	var (
-		devices       []string
-		timestamps    []int64
-		measurementss [][]string
-		dataTypess    [][]client.TSDataType
-		valuess       [][]interface{}
-	)
+	d := Data{
+		devices:       nil,
+		timestamps:    nil,
+		measurementss: nil,
+		dataTypess:    nil,
+		valuess:       nil,
+	}
 
-	for i, di := range digitals {
-		devices = append(devices, fmt.Sprintf("%s.unit%d.D%d", baseRoot, int64(unit_id), di.P_NUM))
-		timestamps = append(timestamps, int64(time))
-		measurementss = append(measurementss, []string{"DV", "DVR", "Q", "BF", "FQ", "FAI", "MS", "TEW", "CST"})
-		dataTypess = append(dataTypess, []client.TSDataType{client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.TEXT, client.INT32})
-		valuess = append(valuess, []interface{}{di.DV, di.DVR, di.Q, di.BF, di.FQ, di.FAI, di.MS, string(di.TEW), int32(di.CST)})
-		if i != 0 && i%int(batchSize) == 0 {
-			insertRecords(&devices, &timestamps, &measurementss, &dataTypess, &valuess)
-
-			// Clear the batch
-			devices = []string{}
-			timestamps = []int64{}
-			measurementss = [][]string{}
-			dataTypess = [][]client.TSDataType{}
-			valuess = [][]interface{}{}
+	if is_fast {
+		for _, di := range digitals {
+			d.devices = append(d.devices, fmt.Sprintf("%s.unit%d.D%d", baseRoot, int64(unit_id), di.P_NUM))
+			d.timestamps = append(d.timestamps, int64(timestamp))
+			d.measurementss = append(d.measurementss, []string{"DV", "DVR", "Q", "BF", "FQ", "FAI", "MS", "TEW", "CST"})
+			d.dataTypess = append(d.dataTypess, []client.TSDataType{client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.TEXT, client.INT32})
+			d.valuess = append(d.valuess, []interface{}{di.DV, di.DVR, di.Q, di.BF, di.FQ, di.FAI, di.MS, string(di.TEW), int32(di.CST)})
+		}
+		// 快采点数据量少，直接写就行
+		wg.Add(1)
+		threadPool.Invoke(d)
+	} else {
+		for i, di := range digitals {
+			d.devices = append(d.devices, fmt.Sprintf("%s.unit%d.D%d", baseRoot, int64(unit_id), di.P_NUM))
+			d.timestamps = append(d.timestamps, int64(timestamp))
+			d.measurementss = append(d.measurementss, []string{"DV", "DVR", "Q", "BF", "FQ", "FAI", "MS", "TEW", "CST"})
+			d.dataTypess = append(d.dataTypess, []client.TSDataType{client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.TEXT, client.INT32})
+			d.valuess = append(d.valuess, []interface{}{di.DV, di.DVR, di.Q, di.BF, di.FQ, di.FAI, di.MS, string(di.TEW), int32(di.CST)})
+			if i != 0 && i%int(batchSize) == 0 {
+				// 普通点数量多，需要处理成并行方式
+				// 写实时数字量OK，插入139650条数据，约140万测点。
+				wg.Add(1)
+				threadPool.Invoke(d)
+				time.Sleep(time.Millisecond * 1)
+				d = Data{
+					devices:       nil,
+					timestamps:    nil,
+					measurementss: nil,
+					dataTypess:    nil,
+					valuess:       nil,
+				}
+			}
+		}
+		if len(d.devices) > 0 {
+			insertData(d)
 		}
 	}
-	if len(devices) > 0 {
-		insertRecords(&devices, &timestamps, &measurementss, &dataTypess, &valuess)
-	}
-	fmt.Println("写实时数字量OK，插入" + strconv.Itoa(int(deviceCount)) + "条数据")
+	fmt.Println(sumaryString(int(deviceCount), is_fast, false))
 }
 
 // 2.1 批量写实时数字量
@@ -303,19 +412,47 @@ func write_rt_digital_list(magic C.int32_t, unit_id C.int64_t, time *C.int64_t, 
 	digitalsArray := (*[1 << 30]*C.Digital)(unsafe.Pointer(digital_array_array_ptr))[:sectionCount:sectionCount]
 	arrayCounts := (*[1 << 30]C.int64_t)(unsafe.Pointer(array_count))[:sectionCount:sectionCount]
 
-	// 直接调用写实时数字量
-	var wg sync.WaitGroup
-	for i := int64(0); i < sectionCount; i++ {
-		wg.Add(1)
-		go func(time C.int64_t, digital_array_ptr *C.Digital, count C.int64_t) {
-			write_rt_digital(magic, unit_id, time, digital_array_ptr, count, true)
-			wg.Done()
-		}(times[i], digitalsArray[i], arrayCounts[i])
-
+	d := Data{
+		devices:       nil,
+		timestamps:    nil,
+		measurementss: nil,
+		dataTypess:    nil,
+		valuess:       nil,
 	}
-	wg.Wait()
 
-	fmt.Println("批量写实时数字量断面OK")
+	tempCount := int64(0)  // 用来统计处理了多少条数据，然后每batchsize插入一次
+	totalCount := int64(0) // 总共多少条数据
+	for i := int64(0); i < sectionCount; i++ {
+		deviceCount := int64(arrayCounts[i])
+		tempCount += deviceCount
+		digitals := (*[1 << 30]Digital)(unsafe.Pointer(digitalsArray[i]))[:deviceCount:deviceCount]
+
+		for _, di := range digitals {
+			d.devices = append(d.devices, fmt.Sprintf("%s.unit%d.D%d", baseRoot, int64(unit_id), di.P_NUM))
+			d.timestamps = append(d.timestamps, int64(times[i]))
+			d.measurementss = append(d.measurementss, []string{"DV", "DVR", "Q", "BF", "FQ", "FAI", "MS", "TEW", "CST"})
+			d.dataTypess = append(d.dataTypess, []client.TSDataType{client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.TEXT, client.INT32})
+			d.valuess = append(d.valuess, []interface{}{di.DV, di.DVR, di.Q, di.BF, di.FQ, di.FAI, di.MS, string(di.TEW), int32(di.CST)})
+		}
+		if tempCount > batchSize {
+			wg.Add(1)
+			threadPool.Invoke(d)
+			d = Data{
+				devices:       nil,
+				timestamps:    nil,
+				measurementss: nil,
+				dataTypess:    nil,
+				valuess:       nil,
+			}
+			totalCount += tempCount
+			tempCount = 0
+		}
+	}
+	if len(d.timestamps) > 0 {
+		totalCount += int64(len(d.timestamps))
+		insertData(d)
+	}
+	fmt.Println("批量写实时数字量断面OK", sumaryString(int(totalCount), true, false))
 }
 
 // 3写历史模拟量
@@ -330,31 +467,34 @@ func write_his_analog(magic C.int32_t, unit_id C.int64_t, time C.int64_t, analog
 	deviceCount := int64(count)
 	analogs := (*[1 << 30]Analog)(unsafe.Pointer(analog_array_ptr))[:deviceCount:deviceCount]
 
-	var (
-		devices       []string
-		timestamps    []int64
-		measurementss [][]string
-		dataTypess    [][]client.TSDataType
-		valuess       [][]interface{}
-	)
+	d := Data{
+		devices:       nil,
+		timestamps:    nil,
+		measurementss: nil,
+		dataTypess:    nil,
+		valuess:       nil,
+	}
 
 	for i, an := range analogs {
-		devices = append(devices, fmt.Sprintf("%s.unit%d.A%d", baseRoot, int64(unit_id), an.P_NUM))
-		timestamps = append(timestamps, int64(time))
-		measurementss = append(measurementss, []string{"AV", "AVR", "Q", "BF", "QF", "FAI", "MS", "TEW", "CST"})
-		dataTypess = append(dataTypess, []client.TSDataType{client.FLOAT, client.FLOAT, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.FLOAT, client.BOOLEAN, client.TEXT, client.INT32})
-		valuess = append(valuess, []interface{}{an.AV, an.AVR, an.Q, an.BF, an.QF, an.FAI, an.MS, string(an.TEW), int32(an.CST)})
+		d.devices = append(d.devices, fmt.Sprintf("%s.unit%d.A%d", baseRoot, int64(unit_id), an.P_NUM))
+		d.timestamps = append(d.timestamps, int64(time))
+		d.measurementss = append(d.measurementss, []string{"AV", "AVR", "Q", "BF", "QF", "FAI", "MS", "TEW", "CST"})
+		d.dataTypess = append(d.dataTypess, []client.TSDataType{client.FLOAT, client.FLOAT, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.FLOAT, client.BOOLEAN, client.TEXT, client.INT32})
+		d.valuess = append(d.valuess, []interface{}{an.AV, an.AVR, an.Q, an.BF, an.QF, an.FAI, an.MS, string(an.TEW), int32(an.CST)})
 		if i != 0 && i%int(batchSize) == 0 {
-			insertRecords(&devices, &timestamps, &measurementss, &dataTypess, &valuess)
-			devices = []string{}
-			timestamps = []int64{}
-			measurementss = [][]string{}
-			dataTypess = [][]client.TSDataType{}
-			valuess = [][]interface{}{}
+			wg.Add(1)
+			threadPool.Invoke(d)
+			d = Data{
+				devices:       nil,
+				timestamps:    nil,
+				measurementss: nil,
+				dataTypess:    nil,
+				valuess:       nil,
+			}
 		}
 	}
-	if len(devices) > 0 {
-		insertRecords(&devices, &timestamps, &measurementss, &dataTypess, &valuess)
+	if len(d.devices) > 0 {
+		insertData(d)
 	}
 	fmt.Println("写历史模拟量OK，插入" + strconv.Itoa(int(deviceCount)) + "条数据")
 }
@@ -371,32 +511,35 @@ func write_his_digital(magic C.int32_t, unit_id C.int64_t, time C.int64_t, digit
 	deviceCount := int64(count)
 	digitals := (*[1 << 30]Digital)(unsafe.Pointer(digital_array_ptr))[:deviceCount:deviceCount]
 
-	var (
-		devices       []string
-		timestamps    []int64
-		measurementss [][]string
-		dataTypess    [][]client.TSDataType
-		valuess       [][]interface{}
-	)
+	d := Data{
+		devices:       nil,
+		timestamps:    nil,
+		measurementss: nil,
+		dataTypess:    nil,
+		valuess:       nil,
+	}
 
 	for i, di := range digitals {
-		devices = append(devices, fmt.Sprintf("%s.unit%d.D%d", baseRoot, int64(unit_id), di.P_NUM))
-		timestamps = append(timestamps, int64(time))
-		measurementss = append(measurementss, []string{"DV", "DVR", "Q", "BF", "FQ", "FAI", "MS", "TEW", "CST"})
-		dataTypess = append(dataTypess, []client.TSDataType{client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.TEXT, client.INT32})
-		valuess = append(valuess, []interface{}{di.DV, di.DVR, di.Q, di.BF, di.FQ, di.FAI, di.MS, string(di.TEW), int32(di.CST)})
+		d.devices = append(d.devices, fmt.Sprintf("%s.unit%d.D%d", baseRoot, int64(unit_id), di.P_NUM))
+		d.timestamps = append(d.timestamps, int64(time))
+		d.measurementss = append(d.measurementss, []string{"DV", "DVR", "Q", "BF", "FQ", "FAI", "MS", "TEW", "CST"})
+		d.dataTypess = append(d.dataTypess, []client.TSDataType{client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.TEXT, client.INT32})
+		d.valuess = append(d.valuess, []interface{}{di.DV, di.DVR, di.Q, di.BF, di.FQ, di.FAI, di.MS, string(di.TEW), int32(di.CST)})
 		if i != 0 && i%int(batchSize) == 0 {
-			insertRecords(&devices, &timestamps, &measurementss, &dataTypess, &valuess)
+			wg.Add(1)
+			threadPool.Invoke(d)
 
-			devices = []string{}
-			timestamps = []int64{}
-			measurementss = [][]string{}
-			dataTypess = [][]client.TSDataType{}
-			valuess = [][]interface{}{}
+			d = Data{
+				devices:       nil,
+				timestamps:    nil,
+				measurementss: nil,
+				dataTypess:    nil,
+				valuess:       nil,
+			}
 		}
 	}
-	if len(devices) > 0 {
-		insertRecords(&devices, &timestamps, &measurementss, &dataTypess, &valuess)
+	if len(d.devices) > 0 {
+		insertData(d)
 	}
 	fmt.Println("写历史数字量OK，插入" + strconv.Itoa(int(deviceCount)) + "条数据")
 }
@@ -434,33 +577,36 @@ func write_static_analog(magic C.int32_t, unit_id C.int64_t, static_analog_array
 	deviceCount := int64(count)
 	staticAnalogs := (*[1 << 30]StaticAnalog)(unsafe.Pointer(static_analog_array_ptr))[:deviceCount:deviceCount]
 
-	var (
-		devices       []string
-		timestamps    []int64
-		measurementss [][]string
-		dataTypess    [][]client.TSDataType
-		valuess       [][]interface{}
-	)
+	d := Data{
+		devices:       nil,
+		timestamps:    nil,
+		measurementss: nil,
+		dataTypess:    nil,
+		valuess:       nil,
+	}
 
 	for i, sa := range staticAnalogs {
-		devices = append(devices, fmt.Sprintf("%s.unit%d.A%d", baseRoot, int64(unit_id), sa.P_NUM))
+		d.devices = append(d.devices, fmt.Sprintf("%s.unit%d.A%d", baseRoot, int64(unit_id), sa.P_NUM))
 		// TODO 没有给时间，timestamp取当前时间戳，可以单独放个测点用来保存这些属性
-		timestamps = append(timestamps, int64(sa.P_NUM))
-		measurementss = append(measurementss, []string{"TAGT", "FACK", "L4AR", "L3AR", "L2AR", "L1AR", "H4AR", "H3AR", "H2AR", "H1AR", "CHN", "PN", "DESC", "UNIT", "MU", "MD"})
-		dataTypess = append(dataTypess, []client.TSDataType{client.INT32, client.INT32, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.TEXT, client.TEXT, client.TEXT, client.TEXT, client.FLOAT, client.FLOAT})
-		valuess = append(valuess, []interface{}{int32(sa.TAGT), int32(sa.FACK), sa.L4AR, sa.L3AR, sa.L2AR, sa.L1AR, sa.H4AR, sa.H3AR, sa.H2AR, sa.H1AR, string(sa.CHN[:]), string(sa.PN[:]), string(sa.DESC[:]), string(sa.UNIT[:]), sa.MU, sa.MD})
+		d.timestamps = append(d.timestamps, int64(sa.P_NUM))
+		d.measurementss = append(d.measurementss, []string{"TAGT", "FACK", "L4AR", "L3AR", "L2AR", "L1AR", "H4AR", "H3AR", "H2AR", "H1AR", "CHN", "PN", "DESC", "UNIT", "MU", "MD"})
+		d.dataTypess = append(d.dataTypess, []client.TSDataType{client.INT32, client.INT32, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.TEXT, client.TEXT, client.TEXT, client.TEXT, client.FLOAT, client.FLOAT})
+		d.valuess = append(d.valuess, []interface{}{int32(sa.TAGT), int32(sa.FACK), sa.L4AR, sa.L3AR, sa.L2AR, sa.L1AR, sa.H4AR, sa.H3AR, sa.H2AR, sa.H1AR, string(sa.CHN[:]), string(sa.PN[:]), string(sa.DESC[:]), string(sa.UNIT[:]), sa.MU, sa.MD})
 		if i != 0 && i%int(batchSize) == 0 {
-			insertRecords(&devices, &timestamps, &measurementss, &dataTypess, &valuess)
+			wg.Add(1)
+			threadPool.Invoke(d)
 
-			devices = []string{}
-			timestamps = []int64{}
-			measurementss = [][]string{}
-			dataTypess = [][]client.TSDataType{}
-			valuess = [][]interface{}{}
+			d = Data{
+				devices:       nil,
+				timestamps:    nil,
+				measurementss: nil,
+				dataTypess:    nil,
+				valuess:       nil,
+			}
 		}
 	}
-	if len(devices) > 0 {
-		insertRecords(&devices, &timestamps, &measurementss, &dataTypess, &valuess)
+	if len(d.devices) > 0 {
+		insertData(d)
 	}
 	fmt.Println("写静态模拟量OK，插入" + strconv.Itoa(int(deviceCount)) + "条数据")
 }
@@ -487,33 +633,36 @@ func write_static_digital(magic C.int32_t, unit_id C.int64_t, static_digital_arr
 	deviceCount := int64(count)
 	staticDigitals := (*[1 << 30]StaticDigital)(unsafe.Pointer(static_digital_array_ptr))[:deviceCount:deviceCount]
 
-	var (
-		devices       []string
-		timestamps    []int64
-		measurementss [][]string
-		dataTypess    [][]client.TSDataType
-		valuess       [][]interface{}
-	)
+	d := Data{
+		devices:       nil,
+		timestamps:    nil,
+		measurementss: nil,
+		dataTypess:    nil,
+		valuess:       nil,
+	}
 
 	for i, sd := range staticDigitals {
-		devices = append(devices, fmt.Sprintf("%s.unit%d.D%d", baseRoot, int64(unit_id), sd.P_NUM))
+		d.devices = append(d.devices, fmt.Sprintf("%s.unit%d.D%d", baseRoot, int64(unit_id), sd.P_NUM))
 		// TODO 同上，没有给时间
-		timestamps = append(timestamps, int64(sd.P_NUM))
-		measurementss = append(measurementss, []string{"FACK", "CHN", "PN", "DESC", "UNIT"})
-		dataTypess = append(dataTypess, []client.TSDataType{client.INT32, client.TEXT, client.TEXT, client.TEXT, client.TEXT})
-		valuess = append(valuess, []interface{}{int32(sd.FACK), string(sd.CHN[:]), string(sd.PN[:]), string(sd.DESC[:]), string(sd.UNIT[:])})
+		d.timestamps = append(d.timestamps, int64(sd.P_NUM))
+		d.measurementss = append(d.measurementss, []string{"FACK", "CHN", "PN", "DESC", "UNIT"})
+		d.dataTypess = append(d.dataTypess, []client.TSDataType{client.INT32, client.TEXT, client.TEXT, client.TEXT, client.TEXT})
+		d.valuess = append(d.valuess, []interface{}{int32(sd.FACK), string(sd.CHN[:]), string(sd.PN[:]), string(sd.DESC[:]), string(sd.UNIT[:])})
 		if i != 0 && i%int(batchSize) == 0 {
-			insertRecords(&devices, &timestamps, &measurementss, &dataTypess, &valuess)
+			wg.Add(1)
+			threadPool.Invoke(d)
 
-			devices = []string{}
-			timestamps = []int64{}
-			measurementss = [][]string{}
-			dataTypess = [][]client.TSDataType{}
-			valuess = [][]interface{}{}
+			d = Data{
+				devices:       nil,
+				timestamps:    nil,
+				measurementss: nil,
+				dataTypess:    nil,
+				valuess:       nil,
+			}
 		}
 	}
-	if len(devices) > 0 {
-		insertRecords(&devices, &timestamps, &measurementss, &dataTypess, &valuess)
+	if len(d.devices) > 0 {
+		insertData(d)
 	}
 	fmt.Println("写静态数字量OK，插入" + strconv.Itoa(int(deviceCount)) + "条数据")
 }
