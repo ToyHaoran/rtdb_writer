@@ -67,6 +67,7 @@ func DurationListToFloatList(durationList []time.Duration) []float64 {
 func Summary(analogList []WriteSectionInfo, digitalList []WriteSectionInfo) (time.Duration, int, time.Duration, time.Duration, time.Duration, time.Duration, time.Duration, time.Duration, int) {
 	infoList := make([]WriteSectionInfo, 0)
 
+	// 将 analogList 中的数据复制到 infoList 中
 	for _, info := range analogList {
 		infoList = append(infoList, WriteSectionInfo{
 			Duration:     info.Duration,
@@ -77,6 +78,7 @@ func Summary(analogList []WriteSectionInfo, digitalList []WriteSectionInfo) (tim
 		})
 	}
 
+	// 将 digitalList 中的数据累加到 infoList 对应位置的数据中：
 	for i, info := range digitalList {
 		if i < len(infoList) {
 			infoList[i].Duration += info.Duration
@@ -84,6 +86,7 @@ func Summary(analogList []WriteSectionInfo, digitalList []WriteSectionInfo) (tim
 		}
 	}
 
+	// 初始化统计变量
 	allDuration := time.Duration(0)
 	sectionCount := 0
 	durationList := make([]time.Duration, 0)
@@ -95,14 +98,18 @@ func Summary(analogList []WriteSectionInfo, digitalList []WriteSectionInfo) (tim
 		pnumCount += int(info.PNumCount)
 	}
 
+	// 对 durationList 进行排序:
 	sort.Slice(durationList, func(i, j int) bool {
 		return durationList[i] < durationList[j]
 	})
+	// 每个断面平均处理时长
 	dAvg := allDuration / time.Duration(sectionCount)
 	dMax := time.Duration(stat.Quantile(1.00, stat.Empirical, DurationListToFloatList(durationList), nil))
 	dMin := time.Duration(stat.Quantile(0.00, stat.Empirical, DurationListToFloatList(durationList), nil))
+	// durationList 中有99%的时长值小于或等于 dP99，只有1%的时长值大于 dP99。
 	dP99 := time.Duration(stat.Quantile(0.99, stat.Empirical, DurationListToFloatList(durationList), nil))
 	dP95 := time.Duration(stat.Quantile(0.95, stat.Empirical, DurationListToFloatList(durationList), nil))
+	// 中位数
 	dP50 := time.Duration(stat.Quantile(0.50, stat.Empirical, DurationListToFloatList(durationList), nil))
 
 	return allDuration, sectionCount, dAvg, dMax, dMin, dP99, dP95, dP50, pnumCount
@@ -913,7 +920,7 @@ func AsyncPeriodicWriteSection(
 		if fastCache {
 			analogList := make([]AnalogSection, 0)
 			digitalList := make([]DigitalSection, 0)
-			for {
+			for { // 循环读取数据，直到缓存100条数据
 				if len(analogList) < 100 {
 					select {
 					case section := <-analogCh:
@@ -978,7 +985,8 @@ func AsyncPeriodicWriteSection(
 				break
 			}
 
-			// 睡眠
+			// 睡眠，控制写入周期，如果 duration 小于预定的周期时间，则需要睡眠一段时间。
+			// 这里是100ms传递一批数据，每批数据的时间从1～100ms，相当于每ms一条数据。
 			if duration < time.Duration(regularWritePeriodic)*time.Millisecond*100 {
 				sleepDuration := time.Duration(regularWritePeriodic)*time.Millisecond*100 - duration
 				if isFast {
