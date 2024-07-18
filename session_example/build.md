@@ -1,16 +1,28 @@
 
 # 将程序编译为插件
 ```shell
-go build -o session_demo
+go build -o test
 ```
 
 # 示例
 ```shell
-./session_demo \
-  --sql "count timeseries" \
-  --is_query true
-```
+./test \
+  --testID=43 \
+  --filePath=../CSV20240614/1720063164967_ZHE_XIAN_QU_SHI.csv
 
-```shell
+./test \
+  --testID=44 \
+  --filePath=../CSV20240614/1720063204751_USECASE_0107_CHA_ZHI.csv
+  
+ ./test \
+  --testID=45 \
+  --filePath=../CSV20240614/1720063269747_USE_CASE_0110_SHU_ZHI_JU_HE.csv
 
+ ./test \
+  --testID=46 \
+  --filePath=../CSV20240614/1720063286252_USECASE_0117_1_SHU_JU_YUN_SUAN_A.csv
+ 
+ ./test \
+  --testID=46 \
+  --filePath=../CSV20240614/1720063286252_USECASE_0117_1_SHU_JU_YUN_SUAN_B.csv
 ```
