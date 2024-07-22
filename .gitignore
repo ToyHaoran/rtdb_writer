@@ -16,3 +16,4 @@ writer/tests.md
 /writer/vendor/
 /plugin_example/vendor/
 /session_example/vendor/
+/.run/

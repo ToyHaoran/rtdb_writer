@@ -31,6 +31,7 @@ var (
 )
 var baseRoot = "root.sg"
 var sessionPool client.SessionPool
+var nodeUrls string
 var batchSize int64
 var conMaxSize int64
 var startTime int64
@@ -45,6 +46,7 @@ func main() {
 
 //export login
 func login(param *C.char) C.int {
+	var err error
 	goParam := C.GoString(param)
 	var params []string
 	params = strings.Split(goParam, ",")
@@ -62,10 +64,12 @@ func login(param *C.char) C.int {
 	flag.StringVar(&port, "port", params[2], "--port=6667")
 	flag.StringVar(&user, "user", params[3], "--user=root")
 	flag.StringVar(&password, "password", params[4], "--password=root")
+	flag.StringVar(&nodeUrls, "nodeUrls", "xty111:6667,xty112:6667,xty113:6667", "--nodeUrls=xty111:6667,xty112:6667,xty113:6667")
 	flag.Parse()
 	config := &client.PoolConfig{
-		Host:     host,
-		Port:     port,
+		//Host:     host,
+		//Port:     port,
+		NodeUrls: strings.Split("xty111:6667,xty112:6667,xty113:6667", ","),
 		UserName: user,
 		Password: password,
 	}
@@ -78,8 +82,8 @@ func login(param *C.char) C.int {
 	sessionPool = client.NewSessionPool(config, int(conMaxSize), 60000, 60000, false)
 
 	// 线程池
-	threadPool, _ = ants.NewPoolWithFunc(
-		int(conMaxSize),
+	threadPool, err = ants.NewPoolWithFunc(
+		int(conMaxSize - 20),  // 控制线程池大小，比sessionPool小一些，否则还是有可能read: connection reset by peer
 		func(i interface{}) {
 			switch i.(type) {
 			case Data:
@@ -89,6 +93,7 @@ func login(param *C.char) C.int {
 			}
 			wg.Done()
 		})
+	checkError(nil, err)
 
 	return 0
 }
@@ -98,8 +103,8 @@ func logout() {
 	wg.Wait()
 	threadPool.Release()
 	sessionPool.Close()
-	endTime = time.Now().UnixMilli()
-	fmt.Println("登出数据库，结束程序，耗时" + fmt.Sprint(endTime-startTime) + "ms")
+	//endTime = time.Now().UnixMilli()
+	//fmt.Println("登出数据库，结束程序，耗时" + fmt.Sprint(endTime-startTime) + "ms")
 }
 
 type Analog struct {
@@ -201,16 +206,16 @@ func write_rt_analog(magic C.int32_t, unit_id C.int64_t, timestamp C.int64_t, an
 	getValues := func(an Analog) []interface{} {
 		return []interface{}{an.P_NUM, an.AV, an.AVR, an.Q, an.BF, an.QF, an.FAI, an.MS, string(an.TEW), int32(an.CST)}
 	}
+	measurementSchemas := make([]*client.MeasurementSchema, len(measurements))
+	for j := range measurements {
+		measurementSchemas[j] = &client.MeasurementSchema{
+			Measurement: measurements[j],
+			DataType:    dataTypes[j],
+		}
+	}
 
 	if is_fast {
 		device := baseRoot + ".unit" + strconv.FormatInt(int64(unit_id), 10) + ".fastA"
-		measurementSchemas := make([]*client.MeasurementSchema, len(measurements))
-		for j := range measurements {
-			measurementSchemas[j] = &client.MeasurementSchema{
-				Measurement: measurements[j],
-				DataType:    dataTypes[j],
-			}
-		}
 		tablet, _ := client.NewTablet(device, measurementSchemas, int(deviceCount))
 		for row, an := range analogs {
 			tablet.SetTimestamp(time.UnixMilli(int64(timestamp)).UnixNano()+int64(an.P_NUM), row)
@@ -238,13 +243,6 @@ func write_rt_analog(magic C.int32_t, unit_id C.int64_t, timestamp C.int64_t, an
 			wgslow.Add(1)
 			go func(start, end int, num int64) {
 				device := baseRoot + ".unit" + strconv.FormatInt(int64(unit_id), 10) + ".normalA" + strconv.FormatInt(num, 10)
-				measurementSchemas := make([]*client.MeasurementSchema, len(measurements))
-				for j := range measurements {
-					measurementSchemas[j] = &client.MeasurementSchema{
-						Measurement: measurements[j],
-						DataType:    dataTypes[j],
-					}
-				}
 				rowCount := int(batchSize)
 				tablet, _ := client.NewTablet(device, measurementSchemas, rowCount)
 				for row, an := range analogs[start:end] {
@@ -260,8 +258,9 @@ func write_rt_analog(magic C.int32_t, unit_id C.int64_t, timestamp C.int64_t, an
 			}(int(start), int(end), num)
 		}
 		wgslow.Wait()
+		fmt.Println(sumaryString(int(deviceCount), is_fast, true))
 	}
-	fmt.Println(sumaryString(int(deviceCount), is_fast, true))
+	//fmt.Println(sumaryString(int(deviceCount), is_fast, true))
 }
 
 // 1.1 批量写实时模拟量断面
@@ -340,15 +339,16 @@ func write_rt_digital(magic C.int32_t, unit_id C.int64_t, timestamp C.int64_t, d
 		return []interface{}{di.P_NUM, di.DV, di.DVR, di.Q, di.BF, di.FQ, di.FAI, di.MS, string(di.TEW), int32(di.CST)}
 	}
 
+	measurementSchemas := make([]*client.MeasurementSchema, len(measurements))
+	for j := range measurements {
+		measurementSchemas[j] = &client.MeasurementSchema{
+			Measurement: measurements[j],
+			DataType:    dataTypes[j],
+		}
+	}
+
 	if is_fast {
 		device := baseRoot + ".unit" + strconv.FormatInt(int64(unit_id), 10) + ".fastD"
-		measurementSchemas := make([]*client.MeasurementSchema, len(measurements))
-		for j := range measurements {
-			measurementSchemas[j] = &client.MeasurementSchema{
-				Measurement: measurements[j],
-				DataType:    dataTypes[j],
-			}
-		}
 		tablet, _ := client.NewTablet(device, measurementSchemas, int(deviceCount))
 		for row, di := range digitals {
 			tablet.SetTimestamp(time.UnixMilli(int64(timestamp)).UnixNano()+int64(di.P_NUM), row)
@@ -374,14 +374,6 @@ func write_rt_digital(magic C.int32_t, unit_id C.int64_t, timestamp C.int64_t, d
 			wgslow.Add(1)
 			go func(start, end int, num int64) {
 				device := baseRoot + ".unit" + strconv.FormatInt(int64(unit_id), 10) + ".normalD" + strconv.FormatInt(num, 10)
-
-				measurementSchemas := make([]*client.MeasurementSchema, len(measurements))
-				for j := range measurements {
-					measurementSchemas[j] = &client.MeasurementSchema{
-						Measurement: measurements[j],
-						DataType:    dataTypes[j],
-					}
-				}
 				rowCount := int(batchSize)
 				tablet, _ := client.NewTablet(device, measurementSchemas, rowCount)
 				for row, di := range digitals[start:end] {
@@ -397,8 +389,9 @@ func write_rt_digital(magic C.int32_t, unit_id C.int64_t, timestamp C.int64_t, d
 			}(int(start), int(end), num)
 		}
 		wgslow.Wait()
+		fmt.Println(sumaryString(int(deviceCount), is_fast, false))
 	}
-	fmt.Println(sumaryString(int(deviceCount), is_fast, false))
+	//fmt.Println(sumaryString(int(deviceCount), is_fast, false))
 }
 
 // 2.1 批量写实时数字量
@@ -576,7 +569,18 @@ func write_static_analog(magic C.int32_t, unit_id C.int64_t, static_analog_array
 		return []interface{}{sa.P_NUM, int32(sa.TAGT), int32(sa.FACK), sa.L4AR, sa.L3AR, sa.L2AR, sa.L1AR, sa.H4AR, sa.H3AR, sa.H2AR, sa.H1AR, string(sa.CHN[:]), string(sa.PN[:]), string(sa.DESC[:]), string(sa.UNIT[:]), sa.MU, sa.MD}
 	}
 
-	device := baseRoot + ".unit" + strconv.FormatInt(int64(unit_id), 10) + ".staticA"
+	var device string
+	switch int64(_type) {
+	case 0:
+		device = baseRoot + ".unit" + strconv.FormatInt(int64(unit_id), 10) + ".fastSA"
+	case 1:
+		device = baseRoot + ".unit" + strconv.FormatInt(int64(unit_id), 10) + ".normalSA"
+	case 2:
+		device = baseRoot + ".unit" + strconv.FormatInt(int64(unit_id), 10) + ".historySA"
+	default:
+		fmt.Println("write_static_analog: type参数错误")
+		return
+	}
 	measurementSchemas := make([]*client.MeasurementSchema, len(measurements))
 	for j := range measurements {
 		measurementSchemas[j] = &client.MeasurementSchema{
@@ -619,13 +623,24 @@ func write_static_digital(magic C.int32_t, unit_id C.int64_t, static_digital_arr
 	deviceCount := int64(count)
 	staticDigitals := (*[1 << 30]StaticDigital)(unsafe.Pointer(static_digital_array_ptr))[:deviceCount:deviceCount]
 
-	measurements := []string{"P_NUM","FACK", "CHN", "PN", "DESC", "UNIT"}
+	measurements := []string{"P_NUM", "FACK", "CHN", "PN", "DESC", "UNIT"}
 	dataTypes := []client.TSDataType{client.INT32, client.INT32, client.TEXT, client.TEXT, client.TEXT, client.TEXT}
 	getValues := func(sd StaticDigital) []interface{} {
 		return []interface{}{sd.P_NUM, int32(sd.FACK), string(sd.CHN[:]), string(sd.PN[:]), string(sd.DESC[:]), string(sd.UNIT[:])}
 	}
+	var device string
+	switch int64(_type) {
+	case 0:
+		device = baseRoot + ".unit" + strconv.FormatInt(int64(unit_id), 10) + ".fastSD"
+	case 1:
+		device = baseRoot + ".unit" + strconv.FormatInt(int64(unit_id), 10) + ".normalSD"
+	case 2:
+		device = baseRoot + ".unit" + strconv.FormatInt(int64(unit_id), 10) + ".historySD"
+	default:
+		fmt.Println("write_static_digital: type参数错误")
+		return
+	}
 
-	device := baseRoot + ".unit" + strconv.FormatInt(int64(unit_id), 10) + ".staticD"
 	measurementSchemas := make([]*client.MeasurementSchema, len(measurements))
 	for j := range measurements {
 		measurementSchemas[j] = &client.MeasurementSchema{
