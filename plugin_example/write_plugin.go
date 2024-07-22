@@ -52,32 +52,32 @@ func login(param *C.char) C.int {
 	params = strings.Split(goParam, ",")
 	if len(params) == 1 {
 		// 使用默认值
-		fmt.Println(fmt.Sprintf("使用默认参数--param=%s,xty111,6667,root,root,1000,5000,root.sg", goParam))
-		params = strings.Split(goParam+",xty111,6667,root,root,1000,5000,root.sg", ",")
+		fmt.Println(fmt.Sprintf("使用默认参数--param=%s,xty111:6667,root,root,1000,5000,root.sg", goParam))
+		params = strings.Split(goParam+",xty111:6667,root,root,1000,5000,root.sg", ",")
 	} else {
 		fmt.Println("参数--param=" + goParam)
 	}
 	fmt.Println("登录数据库，运行" + params[0])
 	startTime = time.Now().UnixMilli()
 	// 使用所给参数
-	flag.StringVar(&host, "host", params[1], "--host=127.0.0.1")
-	flag.StringVar(&port, "port", params[2], "--port=6667")
-	flag.StringVar(&user, "user", params[3], "--user=root")
-	flag.StringVar(&password, "password", params[4], "--password=root")
-	flag.StringVar(&nodeUrls, "nodeUrls", "xty111:6667,xty112:6667,xty113:6667", "--nodeUrls=xty111:6667,xty112:6667,xty113:6667")
+	//flag.StringVar(&host, "host", params[1], "--host=127.0.0.1")
+	//flag.StringVar(&port, "port", params[2], "--port=6667")
+	flag.StringVar(&nodeUrls, "nodeUrls", params[1], "--nodeUrls=xty111:6667-xty112:6667-xty113:6667")
+	flag.StringVar(&user, "user", params[2], "--user=root")
+	flag.StringVar(&password, "password", params[3], "--password=root")
 	flag.Parse()
 	config := &client.PoolConfig{
 		//Host:     host,
 		//Port:     port,
-		NodeUrls: strings.Split("xty111:6667,xty112:6667,xty113:6667", ","),
+		NodeUrls: strings.Split(nodeUrls, "-"),
 		UserName: user,
 		Password: password,
 	}
 
-	conMaxSize, _ = strconv.ParseInt(params[5], 10, 32)
-	batchSize, _ = strconv.ParseInt(params[6], 10, 32)
+	conMaxSize, _ = strconv.ParseInt(params[4], 10, 32)
+	batchSize, _ = strconv.ParseInt(params[5], 10, 32)
 
-	baseRoot = params[7]
+	baseRoot = params[6]
 	// 控制session的并发连接数上限，否则可能断开连接
 	sessionPool = client.NewSessionPool(config, int(conMaxSize), 60000, 60000, false)
 
