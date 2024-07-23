@@ -83,7 +83,7 @@ func login(param *C.char) C.int {
 
 	// 线程池
 	threadPool, err = ants.NewPoolWithFunc(
-		int(conMaxSize - 20),  // 控制线程池大小，比sessionPool小一些，否则还是有可能read: connection reset by peer
+		int(conMaxSize-10), // 控制线程池大小，小于sessionPool的大小
 		func(i interface{}) {
 			switch i.(type) {
 			case Data:
@@ -100,6 +100,7 @@ func login(param *C.char) C.int {
 
 //export logout
 func logout() {
+	fmt.Println("等待数据库退出......")
 	wg.Wait()
 	threadPool.Release()
 	sessionPool.Close()
@@ -215,6 +216,7 @@ func write_rt_analog(magic C.int32_t, unit_id C.int64_t, timestamp C.int64_t, an
 	}
 
 	if is_fast {
+		// 500个测点，一秒约50万条数据。
 		device := baseRoot + ".unit" + strconv.FormatInt(int64(unit_id), 10) + ".fastA"
 		tablet, _ := client.NewTablet(device, measurementSchemas, int(deviceCount))
 		for row, an := range analogs {
@@ -228,37 +230,39 @@ func write_rt_analog(magic C.int32_t, unit_id C.int64_t, timestamp C.int64_t, an
 		wg.Add(1)
 		_ = threadPool.Invoke(tablet)
 	} else {
-		// 普通点数据量巨大，时间序列融合
-		// 写实时模拟量OK，插入59850条数据，约60万测点
-		visualDeviceCount := int64(50) // 虚拟设备数量0～50
-		// TODO 如果PNUM是乱序来的怎么办，可以直接放到一个设备中，也可以根据设备%batchSize求余，放在对应table中
-		batchSize = deviceCount / visualDeviceCount
-		var wgslow sync.WaitGroup
-		for num := int64(0); num <= visualDeviceCount; num++ {
-			start := num * batchSize
-			end := start + batchSize
-			if end > deviceCount {
-				end = deviceCount
-			}
-			wgslow.Add(1)
-			go func(start, end int, num int64) {
-				device := baseRoot + ".unit" + strconv.FormatInt(int64(unit_id), 10) + ".normalA" + strconv.FormatInt(num, 10)
-				rowCount := int(batchSize)
-				tablet, _ := client.NewTablet(device, measurementSchemas, rowCount)
-				for row, an := range analogs[start:end] {
-					tablet.SetTimestamp(time.UnixMilli(int64(timestamp)).UnixNano()+int64(an.P_NUM), row)
-					for i, col := range getValues(an) {
-						_ = tablet.SetValueAt(col, i, row)
-					}
-					tablet.RowSize++
+		if true {
+			// 普通点数据量巨大，时间序列融合  一秒15万条数据。
+			// 写实时模拟量OK，插入59850条数据，约60万测点
+			visualDeviceCount := int64(50) // 虚拟设备数量0～50
+			// TODO 如果PNUM是乱序来的怎么办，可以直接放到一个设备中，也可以根据设备%batchSize求余，放在对应table中
+			batchSize = deviceCount / visualDeviceCount
+			var wgslow sync.WaitGroup
+			for num := int64(0); num <= visualDeviceCount; num++ {
+				start := num * batchSize
+				end := start + batchSize
+				if end > deviceCount {
+					end = deviceCount
 				}
-				wg.Add(1)
-				_ = threadPool.Invoke(tablet)
-				wgslow.Done()
-			}(int(start), int(end), num)
+				wgslow.Add(1)
+				go func(start, end int, num int64) {
+					device := baseRoot + ".unit" + strconv.FormatInt(int64(unit_id), 10) + ".normalA" + strconv.FormatInt(num, 10)
+					rowCount := int(batchSize)
+					tablet, _ := client.NewTablet(device, measurementSchemas, rowCount)
+					for row, an := range analogs[start:end] {
+						tablet.SetTimestamp(time.UnixMilli(int64(timestamp)).UnixNano()+int64(an.P_NUM), row)
+						for i, col := range getValues(an) {
+							_ = tablet.SetValueAt(col, i, row)
+						}
+						tablet.RowSize++
+					}
+					wg.Add(1)
+					_ = threadPool.Invoke(tablet)
+					wgslow.Done()
+				}(int(start), int(end), num)
+			}
+			wgslow.Wait()
+			//fmt.Println(sumaryString(int(deviceCount), is_fast, true))
 		}
-		wgslow.Wait()
-		fmt.Println(sumaryString(int(deviceCount), is_fast, true))
 	}
 	//fmt.Println(sumaryString(int(deviceCount), is_fast, true))
 }
@@ -317,7 +321,7 @@ func write_rt_analog_list(magic C.int32_t, unit_id C.int64_t, timeArray *C.int64
 	// 快采点数据量少，直接写就行，但要控制连接数
 	wg.Add(1)
 	_ = threadPool.Invoke(tablet)
-	fmt.Println("批量写实时模拟量断面OK", sumaryString(totalCount, true, true))
+	//fmt.Println("批量写实时模拟量断面OK", sumaryString(totalCount, true, true))
 }
 
 // 2写实时数字量
@@ -360,36 +364,39 @@ func write_rt_digital(magic C.int32_t, unit_id C.int64_t, timestamp C.int64_t, d
 		wg.Add(1)
 		_ = threadPool.Invoke(tablet)
 	} else {
-		// 普通点数量多，使用时间序列融合
-		// 写实时数字量OK，插入139650条数据，约140万测点。
-		visualDeviceCount := int64(100) // 虚拟设备数量
-		batchSize = deviceCount / visualDeviceCount
-		var wgslow sync.WaitGroup
-		for num := int64(0); num <= visualDeviceCount; num++ {
-			start := num * batchSize
-			end := start + batchSize
-			if end > deviceCount {
-				end = deviceCount
-			}
-			wgslow.Add(1)
-			go func(start, end int, num int64) {
-				device := baseRoot + ".unit" + strconv.FormatInt(int64(unit_id), 10) + ".normalD" + strconv.FormatInt(num, 10)
-				rowCount := int(batchSize)
-				tablet, _ := client.NewTablet(device, measurementSchemas, rowCount)
-				for row, di := range digitals[start:end] {
-					tablet.SetTimestamp(time.UnixMilli(int64(timestamp)).UnixNano()+int64(di.P_NUM), row)
-					for i, col := range getValues(di) {
-						_ = tablet.SetValueAt(col, i, row)
-					}
-					tablet.RowSize++
+
+		if true {
+			// 普通点数量多，使用时间序列融合
+			// 写实时数字量OK，插入139650条数据，约140万测点。
+			visualDeviceCount := int64(100) // 虚拟设备数量
+			batchSize = deviceCount / visualDeviceCount
+			var wgslow sync.WaitGroup
+			for num := int64(0); num <= visualDeviceCount; num++ {
+				start := num * batchSize
+				end := start + batchSize
+				if end > deviceCount {
+					end = deviceCount
 				}
-				wg.Add(1)
-				_ = threadPool.Invoke(tablet)
-				wgslow.Done()
-			}(int(start), int(end), num)
+				wgslow.Add(1)
+				go func(start, end int, num int64) {
+					device := baseRoot + ".unit" + strconv.FormatInt(int64(unit_id), 10) + ".normalD" + strconv.FormatInt(num, 10)
+					rowCount := int(batchSize)
+					tablet, _ := client.NewTablet(device, measurementSchemas, rowCount)
+					for row, di := range digitals[start:end] {
+						tablet.SetTimestamp(time.UnixMilli(int64(timestamp)).UnixNano()+int64(di.P_NUM), row)
+						for i, col := range getValues(di) {
+							_ = tablet.SetValueAt(col, i, row)
+						}
+						tablet.RowSize++
+					}
+					wg.Add(1)
+					_ = threadPool.Invoke(tablet)
+					wgslow.Done()
+				}(int(start), int(end), num)
+			}
+			wgslow.Wait()
+			//fmt.Println(sumaryString(int(deviceCount), is_fast, false))
 		}
-		wgslow.Wait()
-		fmt.Println(sumaryString(int(deviceCount), is_fast, false))
 	}
 	//fmt.Println(sumaryString(int(deviceCount), is_fast, false))
 }
@@ -448,7 +455,7 @@ func write_rt_digital_list(magic C.int32_t, unit_id C.int64_t, timeArray *C.int6
 	// 快采点数据量少，直接写就行，但要控制连接数
 	wg.Add(1)
 	_ = threadPool.Invoke(tablet)
-	fmt.Println("批量写实时数字量断面OK", sumaryString(int(totalCount), true, false))
+	//fmt.Println("批量写实时数字量断面OK", sumaryString(int(totalCount), true, false))
 }
 
 // 3写历史模拟量
