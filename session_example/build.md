@@ -25,4 +25,15 @@ go build -o test
  ./test \
   --testID=46 \
   --filePath=../CSV20240614/1720063286252_USECASE_0117_1_SHU_JU_YUN_SUAN_B.csv
+
+ ./test --testID=1 --filePath=sqlfile/611
+ ./test --testID=614
+ ./test --testID=615
+ ./test --testID=1 --filePath=sqlfile/616
+ ./test --testID=618
+ ./test --testID=6112
+ ./test --testID=1 --filePath=sqlfile/6115
+  
+  
+
 ```

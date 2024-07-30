@@ -1011,9 +1011,13 @@ func AsyncPeriodicWriteSection(
 				duration := time.Duration(0)
 				if len(analogList) != 0 || len(digitalList) != 0 {
 					t1 := time.Now()
-					GlobalPlugin.WriteRtAnalogList(magic, unitNumber, analogList, randomAv)
+					if len(analogList) != 0 {
+						GlobalPlugin.WriteRtAnalogList(magic, unitNumber, analogList, randomAv)
+					}
 					t2 := time.Now()
-					GlobalPlugin.WriteRtDigitalList(magic, unitNumber, digitalList)
+					if len(digitalList) != 0 {
+						GlobalPlugin.WriteRtDigitalList(magic, unitNumber, digitalList)
+					}
 					t3 := time.Now()
 					duration = t3.Sub(t1)
 
@@ -1869,7 +1873,7 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Rtdb Writer version",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("v1.0.4")
+		fmt.Println("v2.0.1")
 	},
 }
 
