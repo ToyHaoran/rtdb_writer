@@ -101,6 +101,36 @@ func login(param *C.char) C.int {
 //export logout
 func logout() {
 	//fmt.Println("等待数据库退出......")
+	if tabletHisAnalog[1].RowSize > 0 {
+		var wgAnalog sync.WaitGroup
+		for i := 1; i < len(tabletHisAnalog); i++ {
+			wgAnalog.Add(1)
+			go func(tablet *client.Tablet) {
+				session, _ := sessionPool.GetSession()
+				checkError(session.InsertTablet(tablet, false))
+				sessionPool.PutBack(session)
+				tablet.Reset()
+				wgAnalog.Done()
+			}(tabletHisAnalog[i])
+		}
+		wgAnalog.Wait()
+		hisAnalogBatchCount = 0
+	}
+	if tabletHisDigital[1].RowSize > 0 {
+		var wgDigital sync.WaitGroup
+		for i := 1; i < len(tabletHisDigital); i++ {
+			wgDigital.Add(1)
+			go func(tablet *client.Tablet) {
+				session, _ := sessionPool.GetSession()
+				checkError(session.InsertTablet(tablet, false))
+				sessionPool.PutBack(session)
+				tablet.Reset()
+				wgDigital.Done()
+			}(tabletHisDigital[i])
+		}
+		wgDigital.Wait()
+		hisDigitalBatchCount = 0
+	}
 	wg.Wait()
 	threadPool.Release()
 	sessionPool.Close()
@@ -455,6 +485,14 @@ func write_rt_digital_list(magic C.int32_t, unit_id C.int64_t, timeArray *C.int6
 	//fmt.Println("批量写实时数字量断面OK", sumaryString(int(totalCount), true, false))
 }
 
+// 攒批数据，需要提前创建30个，0不用
+var tabletHisAnalog = make([]*client.Tablet, 31)
+var hisAnalogBatchCount = 0
+
+func getAnalogValues(an Analog) []interface{} {
+	return []interface{}{an.P_NUM, an.AV, an.AVR, an.Q, an.BF, an.QF, an.FAI, an.MS, string(an.TEW), int32(an.CST)}
+}
+
 // 3写历史模拟量
 // unit_id: 机组ID
 // time: 断面时间戳
@@ -469,11 +507,6 @@ func write_his_analog(magic C.int32_t, unit_id C.int64_t, timestamp C.int64_t, a
 
 	measurements := []string{"P_NUM", "AV", "AVR", "Q", "BF", "QF", "FAI", "MS", "TEW", "CST"}
 	dataTypes := []client.TSDataType{client.INT32, client.FLOAT, client.FLOAT, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.FLOAT, client.BOOLEAN, client.TEXT, client.INT32}
-	getValues := func(an Analog) []interface{} {
-		return []interface{}{an.P_NUM, an.AV, an.AVR, an.Q, an.BF, an.QF, an.FAI, an.MS, string(an.TEW), int32(an.CST)}
-	}
-
-	device := baseRoot + ".unit" + strconv.FormatInt(int64(unit_id), 10) + ".historyA"
 	measurementSchemas := make([]*client.MeasurementSchema, len(measurements))
 	for j := range measurements {
 		measurementSchemas[j] = &client.MeasurementSchema{
@@ -481,17 +514,48 @@ func write_his_analog(magic C.int32_t, unit_id C.int64_t, timestamp C.int64_t, a
 			DataType:    dataTypes[j],
 		}
 	}
-	tablet, _ := client.NewTablet(device, measurementSchemas, int(deviceCount))
-	for row, an := range analogs {
-		tablet.SetTimestamp(time.UnixMilli(int64(timestamp)).UnixNano()+int64(an.P_NUM), row)
-		for i, col := range getValues(an) {
-			_ = tablet.SetValueAt(col, i, row)
+	for _, an := range analogs {
+		id := an.P_NUM // P_NUM从1开始
+		if tabletHisAnalog[id] == nil || tabletHisAnalog[id].RowSize == 0 {
+			device := baseRoot + ".unit" + strconv.FormatInt(int64(unit_id), 10) + ".historyA.d" + strconv.FormatInt(int64(id), 10)
+			tabletHisAnalog[id], _ = client.NewTablet(device, measurementSchemas, int(batchSize))
 		}
-		tablet.RowSize++
+		tabletHisAnalog[id].SetTimestamp(time.UnixMilli(int64(timestamp)).UnixNano(), hisAnalogBatchCount)
+		for i, col := range getAnalogValues(an) {
+			_ = tabletHisAnalog[id].SetValueAt(col, i, hisAnalogBatchCount)
+		}
+		tabletHisAnalog[id].RowSize++
 	}
-	wg.Add(1)
-	_ = threadPool.Invoke(tablet)
+
+	hisAnalogBatchCount++
+
+	// 批次满后插入，一个满，全部满
+	if tabletHisAnalog[1].RowSize == int(batchSize) {
+		var wgAnalog sync.WaitGroup
+		for i := 1; i < len(tabletHisAnalog); i++ {
+			wgAnalog.Add(1)
+			go func(tablet *client.Tablet) {
+				session, _ := sessionPool.GetSession()
+				checkError(session.InsertTablet(tablet, false))
+				sessionPool.PutBack(session)
+				tablet.Reset()
+				wgAnalog.Done()
+			}(tabletHisAnalog[i])
+		}
+		wgAnalog.Wait()
+		hisAnalogBatchCount = 0
+	}
+	// 最后一个没有满的批次在退出数据库的时候插入。
+
 	//fmt.Println("写历史模拟量OK，插入" + strconv.Itoa(int(deviceCount)) + "条数据")
+}
+
+// 攒批数据，需要提前创建70个, 0不用
+var tabletHisDigital = make([]*client.Tablet, 71)
+var hisDigitalBatchCount = 0 // 计数，统计攒了多少数据
+
+func getDigitalValues(di Digital) []interface{} {
+	return []interface{}{di.P_NUM, di.DV, di.DVR, di.Q, di.BF, di.FQ, di.FAI, di.MS, string(di.TEW), int32(di.CST)}
 }
 
 // 4写历史数字量
@@ -508,11 +572,6 @@ func write_his_digital(magic C.int32_t, unit_id C.int64_t, timestamp C.int64_t, 
 
 	measurements := []string{"P_NUM", "DV", "DVR", "Q", "BF", "FQ", "FAI", "MS", "TEW", "CST"}
 	dataTypes := []client.TSDataType{client.INT32, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.TEXT, client.INT32}
-	getValues := func(di Digital) []interface{} {
-		return []interface{}{di.P_NUM, di.DV, di.DVR, di.Q, di.BF, di.FQ, di.FAI, di.MS, string(di.TEW), int32(di.CST)}
-	}
-
-	device := baseRoot + ".unit" + strconv.FormatInt(int64(unit_id), 10) + ".historyD"
 	measurementSchemas := make([]*client.MeasurementSchema, len(measurements))
 	for j := range measurements {
 		measurementSchemas[j] = &client.MeasurementSchema{
@@ -520,16 +579,36 @@ func write_his_digital(magic C.int32_t, unit_id C.int64_t, timestamp C.int64_t, 
 			DataType:    dataTypes[j],
 		}
 	}
-	tablet, _ := client.NewTablet(device, measurementSchemas, int(deviceCount))
-	for row, di := range digitals {
-		tablet.SetTimestamp(time.UnixMilli(int64(timestamp)).UnixNano()+int64(di.P_NUM), row)
-		for i, col := range getValues(di) {
-			_ = tablet.SetValueAt(col, i, row)
+	for _, di := range digitals {
+		id := di.P_NUM
+		if tabletHisDigital[id] == nil || tabletHisDigital[id].RowSize == 0 {
+			device := baseRoot + ".unit" + strconv.FormatInt(int64(unit_id), 10) + ".historyD.d" + strconv.FormatInt(int64(id), 10)
+			tabletHisDigital[id], _ = client.NewTablet(device, measurementSchemas, int(batchSize))
 		}
-		tablet.RowSize++
+		tabletHisDigital[id].SetTimestamp(time.UnixMilli(int64(timestamp)).UnixNano(), hisDigitalBatchCount)
+		for i, col := range getDigitalValues(di) {
+			_ = tabletHisDigital[id].SetValueAt(col, i, hisDigitalBatchCount)
+		}
+		tabletHisDigital[id].RowSize++
 	}
-	wg.Add(1)
-	_ = threadPool.Invoke(tablet)
+
+	hisDigitalBatchCount++
+
+	if tabletHisDigital[1].RowSize == int(batchSize) {
+		var wgDigital sync.WaitGroup
+		for i := 1; i < len(tabletHisDigital); i++ {
+			wgDigital.Add(1)
+			go func(tablet *client.Tablet) {
+				session, _ := sessionPool.GetSession()
+				checkError(session.InsertTablet(tablet, false))
+				sessionPool.PutBack(session)
+				tablet.Reset()
+				wgDigital.Done()
+			}(tabletHisDigital[i])
+		}
+		wgDigital.Wait()
+		hisDigitalBatchCount = 0
+	}
 
 	//fmt.Println("写历史数字量OK，插入" + strconv.Itoa(int(deviceCount)) + "条数据")
 }
