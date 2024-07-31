@@ -1,0 +1,8 @@
+#iotdb插入数据点时不支持添加属性，只能创建元数据的时候添加属性
+create timeseries root.test.d6115.s0  datatype=int32 encoding=PLAIN  attributies(att1=GOOD)
+create timeseries root.test.d6115.s1  datatype=int32 encoding=PLAIN  attributies(att1=BAD)
+create timeseries root.test.d6115.s2  datatype=int32 encoding=PLAIN  attributies(att1=FAULT)
+
+insert into root.test.d6115(s0)  values(10);
+insert into root.test.d6115(s1)  values(50);
+insert into root.test.d6115(s2)  values(80);

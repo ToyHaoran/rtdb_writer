@@ -57,7 +57,7 @@ func login(param *C.char) C.int {
 	} else {
 		fmt.Println("参数--param=" + goParam)
 	}
-	fmt.Println("登录数据库，运行" + params[0])
+	//fmt.Println("登录数据库，运行" + params[0])
 	startTime = time.Now().UnixMilli()
 	// 使用所给参数
 	//flag.StringVar(&host, "host", params[1], "--host=127.0.0.1")
@@ -100,7 +100,7 @@ func login(param *C.char) C.int {
 
 //export logout
 func logout() {
-	fmt.Println("等待数据库退出......")
+	//fmt.Println("等待数据库退出......")
 	wg.Wait()
 	threadPool.Release()
 	sessionPool.Close()
@@ -141,17 +141,14 @@ func insertData(data Data) {
 	session, err := sessionPool.GetSession()
 	if err == nil {
 		checkError(session.InsertRecords(data.devices, data.measurementss, data.dataTypess, data.valuess, data.timestamps))
-		//checkError(session.InsertAlignedRecords(data.devices, data.measurementss, data.dataTypess, data.valuess, data.timestamps))
 	}
 	sessionPool.PutBack(session)
 }
 
 // insertTable 封装为tablet插入
 func insertTable(tablet *client.Tablet) {
-	session, err := sessionPool.GetSession()
-	if err == nil {
-		checkError(session.InsertTablet(tablet, false))
-	}
+	session, _ := sessionPool.GetSession()
+	session.InsertTablet(tablet, false)
 	sessionPool.PutBack(session)
 }
 
@@ -494,7 +491,7 @@ func write_his_analog(magic C.int32_t, unit_id C.int64_t, timestamp C.int64_t, a
 	}
 	wg.Add(1)
 	_ = threadPool.Invoke(tablet)
-	fmt.Println("写历史模拟量OK，插入" + strconv.Itoa(int(deviceCount)) + "条数据")
+	//fmt.Println("写历史模拟量OK，插入" + strconv.Itoa(int(deviceCount)) + "条数据")
 }
 
 // 4写历史数字量
@@ -534,7 +531,7 @@ func write_his_digital(magic C.int32_t, unit_id C.int64_t, timestamp C.int64_t, 
 	wg.Add(1)
 	_ = threadPool.Invoke(tablet)
 
-	fmt.Println("写历史数字量OK，插入" + strconv.Itoa(int(deviceCount)) + "条数据")
+	//fmt.Println("写历史数字量OK，插入" + strconv.Itoa(int(deviceCount)) + "条数据")
 }
 
 type StaticAnalog struct {
@@ -605,7 +602,7 @@ func write_static_analog(magic C.int32_t, unit_id C.int64_t, static_analog_array
 	}
 	wg.Add(1)
 	_ = threadPool.Invoke(tablet)
-	fmt.Println("写静态模拟量OK，插入" + strconv.Itoa(int(deviceCount)) + "条数据")
+	//fmt.Println("写静态模拟量OK，插入" + strconv.Itoa(int(deviceCount)) + "条数据")
 }
 
 type StaticDigital struct {
@@ -665,7 +662,7 @@ func write_static_digital(magic C.int32_t, unit_id C.int64_t, static_digital_arr
 	}
 	wg.Add(1)
 	_ = threadPool.Invoke(tablet)
-	fmt.Println("写静态数字量OK，插入" + strconv.Itoa(int(deviceCount)) + "条数据")
+	//fmt.Println("写静态数字量OK，插入" + strconv.Itoa(int(deviceCount)) + "条数据")
 }
 
 func checkError(status *rpc.TSStatus, err error) {

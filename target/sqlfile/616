@@ -1,0 +1,11 @@
+#创建带标签时间序列
+create timeseries root.test.d616.POINT1 with datatype=int32, encoding=RLE  tags(TAGA=A1);
+create timeseries root.test.d616.POINT2 with datatype=int32, encoding=RLE  tags(TAGA=A1);
+create timeseries root.test.d616.POINT3 with datatype=int32, encoding=RLE  tags(TAGA=A1);
+create timeseries root.test.d616.POINT4 with datatype=int32, encoding=RLE  tags(TAGA=A1);
+create timeseries root.test.d616.POINT5 with datatype=int32, encoding=RLE  tags(TAGA=A1);
+create timeseries root.test.d616.POINT6 with datatype=int32, encoding=RLE  tags(TAGA=B2);
+create timeseries root.test.d616.POINT7 with datatype=int32, encoding=RLE  tags(TAGA=B2);
+create timeseries root.test.d616.POINT8 with datatype=int32, encoding=RLE  tags(TAGA=B2);
+create timeseries root.test.d616.POINT9 with datatype=int32, encoding=RLE  tags(TAGA=B2);
+create timeseries root.test.d616.POINT10 with datatype=int32, encoding=RLE tags(TAGA=B2);

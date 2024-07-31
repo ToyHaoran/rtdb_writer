@@ -1,0 +1,2 @@
+insert into root.test.d619(s0) values (3);
+insert into root.test.d619(s0) values (4);
