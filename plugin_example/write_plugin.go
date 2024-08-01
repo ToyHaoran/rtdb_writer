@@ -101,36 +101,43 @@ func login(param *C.char) C.int {
 //export logout
 func logout() {
 	//fmt.Println("等待数据库退出......")
-	if tabletHisAnalog[1].RowSize > 0 {
-		var wgAnalog sync.WaitGroup
-		for i := 1; i < len(tabletHisAnalog); i++ {
-			wgAnalog.Add(1)
-			go func(tablet *client.Tablet) {
-				session, _ := sessionPool.GetSession()
-				checkError(session.InsertTablet(tablet, false))
-				sessionPool.PutBack(session)
-				tablet.Reset()
-				wgAnalog.Done()
-			}(tabletHisAnalog[i])
+	if tabletHisAnalog[1] != nil {
+		// 插入剩下的历史模拟量数据
+		if tabletHisAnalog[1].RowSize > 0 {
+			var wgAnalog sync.WaitGroup
+			for i := 1; i < len(tabletHisAnalog); i++ {
+				wgAnalog.Add(1)
+				go func(tablet *client.Tablet) {
+					session, _ := sessionPool.GetSession()
+					checkError(session.InsertTablet(tablet, false))
+					sessionPool.PutBack(session)
+					tablet.Reset()
+					wgAnalog.Done()
+				}(tabletHisAnalog[i])
+			}
+			wgAnalog.Wait()
+			hisAnalogBatchCount = 0
 		}
-		wgAnalog.Wait()
-		hisAnalogBatchCount = 0
 	}
-	if tabletHisDigital[1].RowSize > 0 {
-		var wgDigital sync.WaitGroup
-		for i := 1; i < len(tabletHisDigital); i++ {
-			wgDigital.Add(1)
-			go func(tablet *client.Tablet) {
-				session, _ := sessionPool.GetSession()
-				checkError(session.InsertTablet(tablet, false))
-				sessionPool.PutBack(session)
-				tablet.Reset()
-				wgDigital.Done()
-			}(tabletHisDigital[i])
+	if tabletHisDigital != nil {
+		// 插入剩下的历史数字量数据
+		if tabletHisDigital[1].RowSize > 0 {
+			var wgDigital sync.WaitGroup
+			for i := 1; i < len(tabletHisDigital); i++ {
+				wgDigital.Add(1)
+				go func(tablet *client.Tablet) {
+					session, _ := sessionPool.GetSession()
+					checkError(session.InsertTablet(tablet, false))
+					sessionPool.PutBack(session)
+					tablet.Reset()
+					wgDigital.Done()
+				}(tabletHisDigital[i])
+			}
+			wgDigital.Wait()
+			hisDigitalBatchCount = 0
 		}
-		wgDigital.Wait()
-		hisDigitalBatchCount = 0
 	}
+	// 等待线程池执行完毕
 	wg.Wait()
 	threadPool.Release()
 	sessionPool.Close()
@@ -485,7 +492,7 @@ func write_rt_digital_list(magic C.int32_t, unit_id C.int64_t, timeArray *C.int6
 	//fmt.Println("批量写实时数字量断面OK", sumaryString(int(totalCount), true, false))
 }
 
-// 攒批数据，需要提前创建30个，0不用
+// 攒批数据，需要提前创建30个，0不用。没有多机组并行需求，不考虑多机组。
 var tabletHisAnalog = make([]*client.Tablet, 31)
 var hisAnalogBatchCount = 0
 
