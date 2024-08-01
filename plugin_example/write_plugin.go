@@ -119,7 +119,7 @@ func logout() {
 			hisAnalogBatchCount = 0
 		}
 	}
-	if tabletHisDigital != nil {
+	if tabletHisDigital[1] != nil {
 		// 插入剩下的历史数字量数据
 		if tabletHisDigital[1].RowSize > 0 {
 			var wgDigital sync.WaitGroup
@@ -238,9 +238,6 @@ func write_rt_analog(magic C.int32_t, unit_id C.int64_t, timestamp C.int64_t, an
 
 	measurements := []string{"P_NUM", "AV", "AVR", "Q", "BF", "QF", "FAI", "MS", "TEW", "CST"}
 	dataTypes := []client.TSDataType{client.INT32, client.FLOAT, client.FLOAT, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.FLOAT, client.BOOLEAN, client.TEXT, client.INT32}
-	getValues := func(an Analog) []interface{} {
-		return []interface{}{an.P_NUM, an.AV, an.AVR, an.Q, an.BF, an.QF, an.FAI, an.MS, string(an.TEW), int32(an.CST)}
-	}
 	measurementSchemas := make([]*client.MeasurementSchema, len(measurements))
 	for j := range measurements {
 		measurementSchemas[j] = &client.MeasurementSchema{
@@ -255,7 +252,7 @@ func write_rt_analog(magic C.int32_t, unit_id C.int64_t, timestamp C.int64_t, an
 		tablet, _ := client.NewTablet(device, measurementSchemas, int(deviceCount))
 		for row, an := range analogs {
 			tablet.SetTimestamp(time.UnixMilli(int64(timestamp)).UnixNano()+int64(an.P_NUM), row)
-			for i, col := range getValues(an) {
+			for i, col := range getAnalogValues(an) {
 				_ = tablet.SetValueAt(col, i, row)
 			}
 			tablet.RowSize++
@@ -284,7 +281,7 @@ func write_rt_analog(magic C.int32_t, unit_id C.int64_t, timestamp C.int64_t, an
 					tablet, _ := client.NewTablet(device, measurementSchemas, rowCount)
 					for row, an := range analogs[start:end] {
 						tablet.SetTimestamp(time.UnixMilli(int64(timestamp)).UnixNano()+int64(an.P_NUM), row)
-						for i, col := range getValues(an) {
+						for i, col := range getAnalogValues(an) {
 							_ = tablet.SetValueAt(col, i, row)
 						}
 						tablet.RowSize++
@@ -324,9 +321,6 @@ func write_rt_analog_list(magic C.int32_t, unit_id C.int64_t, timeArray *C.int64
 
 	measurements := []string{"P_NUM", "AV", "AVR", "Q", "BF", "QF", "FAI", "MS", "TEW", "CST"}
 	dataTypes := []client.TSDataType{client.INT32, client.FLOAT, client.FLOAT, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.FLOAT, client.BOOLEAN, client.TEXT, client.INT32}
-	getValues := func(an Analog) []interface{} {
-		return []interface{}{an.P_NUM, an.AV, an.AVR, an.Q, an.BF, an.QF, an.FAI, an.MS, string(an.TEW), int32(an.CST)}
-	}
 
 	device := baseRoot + ".unit" + strconv.FormatInt(int64(unit_id), 10) + ".fastA"
 	measurementSchemas := make([]*client.MeasurementSchema, len(measurements))
@@ -345,7 +339,7 @@ func write_rt_analog_list(magic C.int32_t, unit_id C.int64_t, timeArray *C.int64
 		for rowI, an := range analogs {
 			rowOut := rowStart + rowI
 			tablet.SetTimestamp(time.UnixMilli(int64(times[i])).UnixNano()+int64(an.P_NUM), rowOut)
-			for j, col := range getValues(an) {
+			for j, col := range getAnalogValues(an) {
 				_ = tablet.SetValueAt(col, j, rowOut)
 			}
 			tablet.RowSize++
@@ -373,9 +367,6 @@ func write_rt_digital(magic C.int32_t, unit_id C.int64_t, timestamp C.int64_t, d
 
 	measurements := []string{"P_NUM", "DV", "DVR", "Q", "BF", "FQ", "FAI", "MS", "TEW", "CST"}
 	dataTypes := []client.TSDataType{client.INT32, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.TEXT, client.INT32}
-	getValues := func(di Digital) []interface{} {
-		return []interface{}{di.P_NUM, di.DV, di.DVR, di.Q, di.BF, di.FQ, di.FAI, di.MS, string(di.TEW), int32(di.CST)}
-	}
 
 	measurementSchemas := make([]*client.MeasurementSchema, len(measurements))
 	for j := range measurements {
@@ -390,7 +381,7 @@ func write_rt_digital(magic C.int32_t, unit_id C.int64_t, timestamp C.int64_t, d
 		tablet, _ := client.NewTablet(device, measurementSchemas, int(deviceCount))
 		for row, di := range digitals {
 			tablet.SetTimestamp(time.UnixMilli(int64(timestamp)).UnixNano()+int64(di.P_NUM), row)
-			for i, col := range getValues(di) {
+			for i, col := range getDigitalValues(di) {
 				_ = tablet.SetValueAt(col, i, row)
 			}
 			tablet.RowSize++
@@ -418,7 +409,7 @@ func write_rt_digital(magic C.int32_t, unit_id C.int64_t, timestamp C.int64_t, d
 					tablet, _ := client.NewTablet(device, measurementSchemas, rowCount)
 					for row, di := range digitals[start:end] {
 						tablet.SetTimestamp(time.UnixMilli(int64(timestamp)).UnixNano()+int64(di.P_NUM), row)
-						for i, col := range getValues(di) {
+						for i, col := range getDigitalValues(di) {
 							_ = tablet.SetValueAt(col, i, row)
 						}
 						tablet.RowSize++
@@ -458,9 +449,6 @@ func write_rt_digital_list(magic C.int32_t, unit_id C.int64_t, timeArray *C.int6
 
 	measurements := []string{"P_NUM", "DV", "DVR", "Q", "BF", "FQ", "FAI", "MS", "TEW", "CST"}
 	dataTypes := []client.TSDataType{client.INT32, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.TEXT, client.INT32}
-	getValues := func(di Digital) []interface{} {
-		return []interface{}{di.P_NUM, di.DV, di.DVR, di.Q, di.BF, di.FQ, di.FAI, di.MS, string(di.TEW), int32(di.CST)}
-	}
 
 	device := baseRoot + ".unit" + strconv.FormatInt(int64(unit_id), 10) + ".fastD"
 	measurementSchemas := make([]*client.MeasurementSchema, len(measurements))
@@ -479,7 +467,7 @@ func write_rt_digital_list(magic C.int32_t, unit_id C.int64_t, timeArray *C.int6
 		for rowI, di := range digitals {
 			rowOut := rowStart + rowI
 			tablet.SetTimestamp(time.UnixMilli(int64(times[i])).UnixNano()+int64(di.P_NUM), rowOut)
-			for j, col := range getValues(di) {
+			for j, col := range getDigitalValues(di) {
 				_ = tablet.SetValueAt(col, j, rowOut)
 			}
 			tablet.RowSize++
@@ -537,7 +525,7 @@ func write_his_analog(magic C.int32_t, unit_id C.int64_t, timestamp C.int64_t, a
 	hisAnalogBatchCount++
 
 	// 批次满后插入，一个满，全部满
-	if tabletHisAnalog[1].RowSize == int(batchSize) {
+	if tabletHisAnalog[1].RowSize >= int(batchSize) {
 		var wgAnalog sync.WaitGroup
 		for i := 1; i < len(tabletHisAnalog); i++ {
 			wgAnalog.Add(1)
@@ -601,7 +589,7 @@ func write_his_digital(magic C.int32_t, unit_id C.int64_t, timestamp C.int64_t, 
 
 	hisDigitalBatchCount++
 
-	if tabletHisDigital[1].RowSize == int(batchSize) {
+	if tabletHisDigital[1].RowSize >= int(batchSize) {
 		var wgDigital sync.WaitGroup
 		for i := 1; i < len(tabletHisDigital); i++ {
 			wgDigital.Add(1)
