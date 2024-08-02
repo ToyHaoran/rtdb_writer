@@ -13,6 +13,4 @@ writer/tests.md
 /pkg/
 /CSV/
 /.run/
-/writer/vendor/
-/plugin_example/vendor/
-/session_example/vendor/
+/*/vendor/
