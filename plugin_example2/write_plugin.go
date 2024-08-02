@@ -38,9 +38,9 @@ var startTime int64
 var endTime int64
 
 // 批处理快采点 map[unit_id][P_NUM]:tablet  150个P_NUM，0不用
-var rtFastAnalogMap = make([]*client.Tablet, 151)
+var rtFastAnalogs = make([]*client.Tablet, 151)
 var rtFastAnalogCount int
-var rtFastDigitalMap = make([]*client.Tablet, 351)
+var rtFastDigitals = make([]*client.Tablet, 351)
 var rtFastDigitalCount int
 
 var wg sync.WaitGroup // go协程池用
@@ -89,7 +89,7 @@ func login(param *C.char) C.int {
 
 	// 线程池
 	threadPool, err = ants.NewPoolWithFunc(
-		int(conMaxSize-10), // 控制线程池大小，小于sessionPool的大小
+		int(conMaxSize-500), // 控制线程池大小，留给快采点的线程数
 		func(i interface{}) {
 			switch i.(type) {
 			case Data:
@@ -141,6 +141,40 @@ func logout() {
 			}
 			wgDigital.Wait()
 			hisDigitalBatchCount = 0
+		}
+	}
+	if rtFastAnalogs[1] != nil {
+		if rtFastAnalogs[1].RowSize > 0 {
+			var rtWgAnalog sync.WaitGroup
+			for j := 1; j < len(rtFastAnalogs); j++ {
+				rtWgAnalog.Add(1)
+				go func(tablet *client.Tablet) {
+					session, _ := sessionPool.GetSession()
+					checkError(session.InsertTablet(tablet, false))
+					sessionPool.PutBack(session)
+					tablet.Reset()
+					rtWgAnalog.Done()
+				}(rtFastAnalogs[j])
+			}
+			rtWgAnalog.Wait()
+			rtFastAnalogCount = 0
+		}
+	}
+	if rtFastDigitals[1] != nil {
+		if rtFastDigitals[1].RowSize > 0 {
+			var rtWgDigital sync.WaitGroup
+			for j := 1; j < len(rtFastDigitals); j++ {
+				rtWgDigital.Add(1)
+				go func(tablet *client.Tablet) {
+					session, _ := sessionPool.GetSession()
+					checkError(session.InsertTablet(tablet, false))
+					sessionPool.PutBack(session)
+					tablet.Reset()
+					rtWgDigital.Done()
+				}(rtFastDigitals[j])
+			}
+			rtWgDigital.Wait()
+			rtFastDigitalCount = 0
 		}
 	}
 	// 等待线程池执行完毕
@@ -228,6 +262,19 @@ type Data struct {
 	valuess       [][]interface{}
 }
 
+func getAnalogSchema() []*client.MeasurementSchema {
+	measurements := []string{"P_NUM", "AV", "AVR", "Q", "BF", "QF", "FAI", "MS", "TEW", "CST"}
+	dataTypes := []client.TSDataType{client.INT32, client.FLOAT, client.FLOAT, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.FLOAT, client.BOOLEAN, client.TEXT, client.INT32}
+	measurementSchemas := make([]*client.MeasurementSchema, len(measurements))
+	for j := range measurements {
+		measurementSchemas[j] = &client.MeasurementSchema{
+			Measurement: measurements[j],
+			DataType:    dataTypes[j],
+		}
+	}
+	return measurementSchemas
+}
+
 // 1写实时模拟量
 // magic: 魔数, 用于标记测试数据集
 // unit_id: 机组ID
@@ -242,49 +289,57 @@ func write_rt_analog(magic C.int32_t, unit_id C.int64_t, timestamp C.int64_t, an
 	deviceCount := int64(count)
 	analogs := (*[1 << 30]Analog)(unsafe.Pointer(analog_array_ptr))[:deviceCount:deviceCount]
 
-	measurements := []string{"P_NUM", "AV", "AVR", "Q", "BF", "QF", "FAI", "MS", "TEW", "CST"}
-	dataTypes := []client.TSDataType{client.INT32, client.FLOAT, client.FLOAT, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.FLOAT, client.BOOLEAN, client.TEXT, client.INT32}
-	measurementSchemas := make([]*client.MeasurementSchema, len(measurements))
-	for j := range measurements {
-		measurementSchemas[j] = &client.MeasurementSchema{
-			Measurement: measurements[j],
-			DataType:    dataTypes[j],
-		}
-	}
-
 	if is_fast {
-		// 150个测点。
-		device := baseRoot + ".unit" + strconv.FormatInt(int64(unit_id), 10) + ".fastA"
-		tablet, _ := client.NewTablet(device, measurementSchemas, int(deviceCount))
-		for row, an := range analogs {
-			tablet.SetTimestamp(time.UnixMilli(int64(timestamp)).UnixNano()+int64(an.P_NUM), row)
-			for i, col := range getAnalogValues(an) {
-				_ = tablet.SetValueAt(col, i, row)
+		// 150个设备，分设备，320us
+		// 并发后反而慢了，480us
+		for _, an := range analogs {
+			id := an.P_NUM // P_NUM从1开始
+			if rtFastAnalogs[id] == nil || rtFastAnalogs[id].RowSize == 0 {
+				device := baseRoot + ".unit" + strconv.FormatInt(int64(unit_id), 10) + ".fastA.d" + strconv.FormatInt(int64(id), 10)
+				rtFastAnalogs[id], _ = client.NewTablet(device, getAnalogSchema(), int(batchSize))
 			}
-			tablet.RowSize++
+			rtFastAnalogs[id].SetTimestamp(time.UnixMilli(int64(timestamp)).UnixNano(), rtFastAnalogCount)
+			for j, col := range getAnalogValues(an) {
+				_ = rtFastAnalogs[id].SetValueAt(col, j, rtFastAnalogCount)
+			}
+			rtFastAnalogs[id].RowSize++
 		}
-		// 快采点数据量少，直接写就行，但要控制连接数
-		wg.Add(1)
-		_ = threadPool.Invoke(tablet)
+		rtFastAnalogCount++
+		// 数据满后插入
+		if rtFastAnalogs[1].RowSize >= int(batchSize) {
+			var rtWgAnalog sync.WaitGroup
+			for j := 1; j < len(rtFastAnalogs); j++ {
+				rtWgAnalog.Add(1)
+				go func(tablet *client.Tablet) {
+					session, _ := sessionPool.GetSession()
+					checkError(session.InsertTablet(tablet, false))
+					sessionPool.PutBack(session)
+					tablet.Reset()
+					rtWgAnalog.Done()
+				}(rtFastAnalogs[j])
+			}
+			rtWgAnalog.Wait()
+			rtFastAnalogCount = 0
+		}
 	} else {
 		if true {
 			// 普通点数据量巨大，时间序列融合  一秒15万条数据。
 			// 写实时模拟量OK，插入59850条数据，约60万测点
 			visualDeviceCount := int64(50) // 虚拟设备数量0～50
 			// TODO 如果PNUM是乱序来的怎么办，可以直接放到一个设备中，也可以根据设备%batchSize求余，放在对应table中
-			batchSize = deviceCount / visualDeviceCount
+			normalBatchSize := deviceCount / visualDeviceCount
 			var wgslow sync.WaitGroup
 			for num := int64(0); num <= visualDeviceCount; num++ {
-				start := num * batchSize
-				end := start + batchSize
+				start := num * normalBatchSize
+				end := start + normalBatchSize
 				if end > deviceCount {
 					end = deviceCount
 				}
 				wgslow.Add(1)
 				go func(start, end int, num int64) {
 					device := baseRoot + ".unit" + strconv.FormatInt(int64(unit_id), 10) + ".normalA" + strconv.FormatInt(num, 10)
-					rowCount := int(batchSize)
-					tablet, _ := client.NewTablet(device, measurementSchemas, rowCount)
+					rowCount := int(normalBatchSize)
+					tablet, _ := client.NewTablet(device, getAnalogSchema(), rowCount)
 					for row, an := range analogs[start:end] {
 						tablet.SetTimestamp(time.UnixMilli(int64(timestamp)).UnixNano()+int64(an.P_NUM), row)
 						for i, col := range getAnalogValues(an) {
@@ -303,6 +358,7 @@ func write_rt_analog(magic C.int32_t, unit_id C.int64_t, timestamp C.int64_t, an
 	}
 	//fmt.Println(sumaryString(int(deviceCount), is_fast, true))
 }
+
 
 // 1.1 批量写实时模拟量断面
 // unit_id: 机组ID
@@ -325,18 +381,8 @@ func write_rt_analog_list(magic C.int32_t, unit_id C.int64_t, timeArray *C.int64
 		totalCount += int(tcount)
 	}
 
-	measurements := []string{"P_NUM", "AV", "AVR", "Q", "BF", "QF", "FAI", "MS", "TEW", "CST"}
-	dataTypes := []client.TSDataType{client.INT32, client.FLOAT, client.FLOAT, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.FLOAT, client.BOOLEAN, client.TEXT, client.INT32}
-
 	device := baseRoot + ".unit" + strconv.FormatInt(int64(unit_id), 10) + ".fastA"
-	measurementSchemas := make([]*client.MeasurementSchema, len(measurements))
-	for j := range measurements {
-		measurementSchemas[j] = &client.MeasurementSchema{
-			Measurement: measurements[j],
-			DataType:    dataTypes[j],
-		}
-	}
-	tablet, _ := client.NewTablet(device, measurementSchemas, totalCount)
+	tablet, _ := client.NewTablet(device, getAnalogSchema(), totalCount)
 
 	rowStart := 0
 	for i := int64(0); i < sectionCount; i++ {
@@ -358,6 +404,21 @@ func write_rt_analog_list(magic C.int32_t, unit_id C.int64_t, timeArray *C.int64
 	//fmt.Println("批量写实时模拟量断面OK", sumaryString(totalCount, true, true))
 }
 
+
+func getDigitalSchema() []*client.MeasurementSchema {
+	measurements := []string{"P_NUM", "DV", "DVR", "Q", "BF", "FQ", "FAI", "MS", "TEW", "CST"}
+	dataTypes := []client.TSDataType{client.INT32, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.TEXT, client.INT32}
+
+	measurementSchemas := make([]*client.MeasurementSchema, len(measurements))
+	for j := range measurements {
+		measurementSchemas[j] = &client.MeasurementSchema{
+			Measurement: measurements[j],
+			DataType:    dataTypes[j],
+		}
+	}
+	return measurementSchemas
+}
+
 // 2写实时数字量
 // unit_id: 机组ID
 // time: 断面时间戳
@@ -370,49 +431,55 @@ func write_rt_digital(magic C.int32_t, unit_id C.int64_t, timestamp C.int64_t, d
 	//fmt.Println("写实时数字量start")
 	deviceCount := int64(count)
 	digitals := (*[1 << 30]Digital)(unsafe.Pointer(digital_array_ptr))[:deviceCount:deviceCount]
-
-	measurements := []string{"P_NUM", "DV", "DVR", "Q", "BF", "FQ", "FAI", "MS", "TEW", "CST"}
-	dataTypes := []client.TSDataType{client.INT32, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.TEXT, client.INT32}
-
-	measurementSchemas := make([]*client.MeasurementSchema, len(measurements))
-	for j := range measurements {
-		measurementSchemas[j] = &client.MeasurementSchema{
-			Measurement: measurements[j],
-			DataType:    dataTypes[j],
-		}
-	}
-
 	if is_fast {
-		device := baseRoot + ".unit" + strconv.FormatInt(int64(unit_id), 10) + ".fastD"
-		tablet, _ := client.NewTablet(device, measurementSchemas, int(deviceCount))
-		for row, di := range digitals {
-			tablet.SetTimestamp(time.UnixMilli(int64(timestamp)).UnixNano()+int64(di.P_NUM), row)
-			for i, col := range getDigitalValues(di) {
-				_ = tablet.SetValueAt(col, i, row)
+		// 350个测点
+		for _, di := range digitals {
+			id := di.P_NUM // P_NUM从1开始
+			if rtFastDigitals[id] == nil || rtFastDigitals[id].RowSize == 0 {
+				device := baseRoot + ".unit" + strconv.FormatInt(int64(unit_id), 10) + ".fastD.d" + strconv.FormatInt(int64(id), 10)
+				rtFastDigitals[id], _ = client.NewTablet(device, getDigitalSchema(), int(batchSize))
 			}
-			tablet.RowSize++
+			rtFastDigitals[id].SetTimestamp(time.UnixMilli(int64(timestamp)).UnixNano(), rtFastDigitalCount)
+			for j, col := range getDigitalValues(di) {
+				_ = rtFastDigitals[id].SetValueAt(col, j, rtFastDigitalCount)
+			}
+			rtFastDigitals[id].RowSize++
 		}
-		wg.Add(1)
-		_ = threadPool.Invoke(tablet)
+		rtFastDigitalCount++
+		// 数据满后插入
+		if rtFastDigitals[1].RowSize >= int(batchSize) {
+			var rtWgDigital sync.WaitGroup
+			for j := 1; j < len(rtFastDigitals); j++ {
+				rtWgDigital.Add(1)
+				go func(tablet *client.Tablet) {
+					session, _ := sessionPool.GetSession()
+					checkError(session.InsertTablet(tablet, false))
+					sessionPool.PutBack(session)
+					tablet.Reset()
+					rtWgDigital.Done()
+				}(rtFastDigitals[j])
+			}
+			rtWgDigital.Wait()
+			rtFastDigitalCount = 0
+		}
 	} else {
-
 		if true {
 			// 普通点数量多，使用时间序列融合
 			// 写实时数字量OK，插入139650条数据，约140万测点。
 			visualDeviceCount := int64(100) // 虚拟设备数量
-			batchSize = deviceCount / visualDeviceCount
+			normalBatchSize := deviceCount / visualDeviceCount
 			var wgslow sync.WaitGroup
 			for num := int64(0); num <= visualDeviceCount; num++ {
-				start := num * batchSize
-				end := start + batchSize
+				start := num * normalBatchSize
+				end := start + normalBatchSize
 				if end > deviceCount {
 					end = deviceCount
 				}
 				wgslow.Add(1)
 				go func(start, end int, num int64) {
 					device := baseRoot + ".unit" + strconv.FormatInt(int64(unit_id), 10) + ".normalD" + strconv.FormatInt(num, 10)
-					rowCount := int(batchSize)
-					tablet, _ := client.NewTablet(device, measurementSchemas, rowCount)
+					rowCount := int(normalBatchSize)
+					tablet, _ := client.NewTablet(device, getDigitalSchema(), rowCount)
 					for row, di := range digitals[start:end] {
 						tablet.SetTimestamp(time.UnixMilli(int64(timestamp)).UnixNano()+int64(di.P_NUM), row)
 						for i, col := range getDigitalValues(di) {
@@ -431,6 +498,8 @@ func write_rt_digital(magic C.int32_t, unit_id C.int64_t, timestamp C.int64_t, d
 	}
 	//fmt.Println(sumaryString(int(deviceCount), is_fast, false))
 }
+
+
 
 // 2.1 批量写实时数字量
 // unit_id: 机组ID
@@ -453,18 +522,8 @@ func write_rt_digital_list(magic C.int32_t, unit_id C.int64_t, timeArray *C.int6
 		totalCount += int(tcount)
 	}
 
-	measurements := []string{"P_NUM", "DV", "DVR", "Q", "BF", "FQ", "FAI", "MS", "TEW", "CST"}
-	dataTypes := []client.TSDataType{client.INT32, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.TEXT, client.INT32}
-
 	device := baseRoot + ".unit" + strconv.FormatInt(int64(unit_id), 10) + ".fastD"
-	measurementSchemas := make([]*client.MeasurementSchema, len(measurements))
-	for j := range measurements {
-		measurementSchemas[j] = &client.MeasurementSchema{
-			Measurement: measurements[j],
-			DataType:    dataTypes[j],
-		}
-	}
-	tablet, _ := client.NewTablet(device, measurementSchemas, totalCount)
+	tablet, _ := client.NewTablet(device, getDigitalSchema(), totalCount)
 
 	rowStart := 0
 	for i := int64(0); i < sectionCount; i++ {
