@@ -150,6 +150,247 @@ func main() {
 		timeStart, err := time.Parse("2006-01-02 15:04:05", "2024-01-01 00:00:00")
 		checkError(nil, err)
 		createAndInsertData(100000, timeStart, interval, device, measurements, dataTypes)
+	case 991:
+		// 制造历史模拟量
+		initAnalogData := []string{
+			",1,301.86736935689703,301.86736935689703,False,True,True,301.86736935689703,False,d,27294",
+			",2,300.7082776433076,300.7082776433076,True,False,False,300.7082776433076,True,e,12809",
+			",3,302.8205594044708,302.8205594044708,False,False,True,302.8205594044708,True,j,21709",
+			",4,301.671979447537,301.671979447537,False,True,False,301.671979447537,False,d,56557",
+			",5,301.906227389479,301.906227389479,False,True,True,301.906227389479,True,m,25308",
+			",6,300.78442366384627,300.78442366384627,True,False,False,300.78442366384627,True,x,59005",
+			",7,300.04856621726435,300.04856621726435,True,True,False,300.04856621726435,False,i,5561",
+			",8,300.1299248317014,300.1299248317014,True,False,False,300.1299248317014,True,o,52405",
+			",9,302.0507177004741,302.0507177004741,False,True,False,302.0507177004741,False,w,10132",
+			",10,300.03306808594095,300.03306808594095,False,False,True,300.03306808594095,False,e,29804",
+			",11,301.01573412930315,301.01573412930315,True,True,False,301.01573412930315,False,j,64664",
+			",12,302.99362164921297,302.99362164921297,True,True,True,302.99362164921297,True,e,21256",
+			",13,301.17429758316536,301.17429758316536,True,False,False,301.17429758316536,False,b,31278",
+			",14,300.3143119632131,300.3143119632131,False,False,False,300.3143119632131,False,a,1375",
+			",15,302.3813341945054,302.3813341945054,False,False,True,302.3813341945054,True,p,8418",
+			",16,302.8588373248654,302.8588373248654,True,False,False,302.8588373248654,True,s,13077",
+			",17,300.27924809862174,300.27924809862174,True,False,True,300.27924809862174,False,a,26515",
+			",18,301.7361976834379,301.7361976834379,False,True,True,301.7361976834379,False,n,4870",
+			",19,302.8115441496715,302.8115441496715,True,False,True,302.8115441496715,False,j,59301",
+			",20,300.9242988810998,300.9242988810998,False,False,True,300.9242988810998,False,i,157",
+			",21,302.83227500076845,302.83227500076845,True,False,False,302.83227500076845,True,t,30221",
+			",22,300.2347609573683,300.2347609573683,False,True,True,300.2347609573683,False,g,25264",
+			",23,302.09232265085814,302.09232265085814,True,True,True,302.09232265085814,True,c,41770",
+			",24,301.48743731924674,301.48743731924674,False,False,True,301.48743731924674,True,l,30692",
+			",25,301.2165711825047,301.2165711825047,False,True,False,301.2165711825047,False,o,7025",
+			",26,300.56672785601404,300.56672785601404,False,False,True,300.56672785601404,True,t,23476",
+			",27,302.3211582116006,302.3211582116006,False,True,False,302.3211582116006,False,q,22233",
+			",28,302.07673619612865,302.07673619612865,True,True,True,302.07673619612865,False,h,60000",
+			",29,301.33380873635116,301.33380873635116,False,False,True,301.33380873635116,False,w,37505",
+			",30,301.0018884568768,301.0018884568768,True,True,True,301.0018884568768,False,j,7051",
+		}
+		// 制造历史数字量
+		initDigitalData := []string{
+			",1,True,True,True,False,False,True,False,w,33645",
+			",2,True,True,False,True,True,True,False,r,50283",
+			",3,True,True,False,True,False,True,False,m,58208",
+			",4,True,True,True,False,False,True,True,c,24005",
+			",5,False,False,True,True,False,False,True,x,15204",
+			",6,True,True,False,True,False,True,False,a,46096",
+			",7,True,True,True,True,True,True,False,z,30373",
+			",8,True,True,True,False,False,True,False,n,30888",
+			",9,True,True,False,True,False,True,False,m,61999",
+			",10,True,True,False,True,False,True,False,z,29111",
+			",11,True,True,False,False,True,True,True,d,11845",
+			",12,False,False,True,False,False,False,False,c,47081",
+			",13,False,False,False,True,True,False,False,u,33782",
+			",14,True,True,False,False,False,True,False,y,49515",
+			",15,True,True,False,True,True,True,True,l,45631",
+			",16,True,True,False,True,True,True,False,r,45638",
+			",17,False,False,False,False,True,False,True,q,4247",
+			",18,True,True,False,False,False,True,False,q,20511",
+			",19,False,False,True,False,False,False,False,v,11755",
+			",20,True,True,False,True,True,True,False,z,19022",
+			",21,True,True,False,False,False,True,True,g,5854",
+			",22,True,True,True,True,False,True,True,g,408",
+			",23,True,True,True,False,True,True,True,a,47421",
+			",24,True,True,False,False,False,True,False,g,50101",
+			",25,True,True,False,False,True,True,True,o,54745",
+			",26,True,True,True,True,False,True,False,p,5298",
+			",27,False,False,True,True,True,False,True,k,8105",
+			",28,True,True,True,False,False,True,True,v,53542",
+			",29,True,True,True,True,False,True,False,q,56291",
+			",30,False,False,True,True,True,False,True,m,49222",
+			",31,True,True,True,True,True,True,False,n,18457",
+			",32,False,False,True,False,True,False,True,d,18464",
+			",33,True,True,False,False,False,True,False,b,7263",
+			",34,True,True,False,False,True,True,False,y,52509",
+			",35,True,True,True,True,True,True,True,s,10491",
+			",36,True,True,True,True,False,True,True,h,4117",
+			",37,True,True,False,False,False,True,False,f,52380",
+			",38,True,True,True,True,True,True,True,n,35645",
+			",39,True,True,True,True,False,True,False,f,17814",
+			",40,True,True,False,True,True,True,False,x,3008",
+			",41,True,True,False,True,True,True,False,d,34725",
+			",42,False,False,False,True,False,False,False,n,58587",
+			",43,True,True,True,False,False,True,False,e,58292",
+			",44,True,True,True,True,False,True,False,i,63798",
+			",45,True,True,False,True,False,True,True,n,58730",
+			",46,True,True,False,False,True,True,False,e,63403",
+			",47,True,True,True,False,True,True,True,c,16616",
+			",48,True,True,True,False,False,True,False,i,35680",
+			",49,False,False,False,True,False,False,True,d,57893",
+			",50,False,False,False,True,True,False,False,d,19265",
+			",51,True,True,False,True,False,True,False,a,20549",
+			",52,False,False,True,False,False,False,False,b,6311",
+			",53,False,False,True,False,True,False,False,k,53123",
+			",54,False,False,True,False,True,False,True,o,2915",
+			",55,True,True,True,False,False,True,False,w,2954",
+			",56,True,True,True,True,True,True,True,r,44885",
+			",57,True,True,True,True,False,True,False,l,734",
+			",58,False,False,False,True,True,False,False,s,65475",
+			",59,True,True,False,False,False,True,True,p,8640",
+			",60,True,True,False,False,True,True,True,g,11119",
+			",61,True,True,True,False,False,True,False,l,16811",
+			",62,True,True,False,False,False,True,False,u,7419",
+			",63,True,True,False,False,True,True,False,v,48079",
+			",64,False,False,True,False,False,False,True,w,34156",
+			",65,True,True,False,False,False,True,True,t,48200",
+			",66,True,True,True,False,False,True,False,j,51268",
+			",67,False,False,True,True,True,False,True,a,18769",
+			",68,True,True,True,True,False,True,False,y,26140",
+			",69,False,False,False,False,False,False,True,f,17753",
+			",70,True,True,False,True,False,True,True,m,57305",
+		}
+		count := 60 * 24 * 60 * 60 * 1000
+		// 打开文件（以追加模式）
+		go func() {
+			file1, _ := os.OpenFile("../CSV/analogOutput.csv", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			writer1 := bufio.NewWriter(file1) // 创建一个缓冲写入器
+			interval := 400
+			for t := 0; t < count; t += interval {
+				for _, line := range initAnalogData {
+					writer1.WriteString(strconv.FormatInt(int64(t), 10) + line + "\n")
+				}
+				writer1.Flush()
+			}
+			file1.Close()
+		}()
+
+		file2, _ := os.OpenFile("../CSV/digitalOutput.csv", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		writer2 := bufio.NewWriter(file2) // 创建一个缓冲写入器
+		interval := 400
+		for t := 0; t < count; t += interval {
+			for _, line := range initDigitalData {
+				writer2.WriteString(strconv.FormatInt(int64(t), 10) + line + "\n")
+			}
+			writer2.Flush() // 刷新缓冲区
+		}
+		file2.Close()
+	case 992:
+		// 快采点模拟量
+		initFastAnalog := []string{
+			",300.51895612926927,300.51895612926927,False,True,True,300.51895612926927,True,b,17887",
+			",301.3360220914003,301.3360220914003,False,False,False,301.3360220914003,True,a,17986",
+			",301.7538845756861,301.7538845756861,False,True,False,301.7538845756861,False,l,9191",
+			",300.2033427340847,300.2033427340847,True,False,True,300.2033427340847,True,x,6441",
+			",300.78892701638114,300.78892701638114,False,True,False,300.78892701638114,True,w,23669",
+			",301.84380991325435,301.84380991325435,True,False,False,301.84380991325435,False,f,18677",
+			",300.4005546405889,300.4005546405889,True,True,False,300.4005546405889,True,y,59996",
+			",300.1198801800455,300.1198801800455,False,False,True,300.1198801800455,True,m,12539",
+			",302.7308889001857,302.7308889001857,False,False,False,302.7308889001857,True,w,48375",
+			",302.12840888273524,302.12840888273524,False,True,True,302.12840888273524,False,c,61816",
+		}
+		// 快采点数字量
+		initFastDigital := []string{
+			",True,True,False,True,True,True,True,z,16697",
+			",True,True,True,True,False,True,True,i,39976",
+			",True,True,False,True,True,True,False,q,55019",
+			",True,True,False,True,True,True,True,w,109",
+			",False,False,False,True,False,False,True,u,10951",
+			",False,False,True,True,True,False,True,d,63064",
+			",True,True,False,False,True,True,True,n,37486",
+			",False,False,False,True,True,False,False,a,29801",
+			",True,True,True,False,False,True,True,r,36900",
+			",True,True,False,True,False,True,True,r,51645",
+		}
+		count := 1 * 60 * 60 * 1000
+		interval := 1
+
+		// 打开文件（以追加模式）
+		go func() {
+			file1, _ := os.OpenFile("../CSV/testFastAnalog.csv", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			writer1 := bufio.NewWriter(file1) // 创建一个缓冲写入器
+			for t := 0; t < count; t += interval {
+				timestamp := strconv.FormatInt(int64(t), 10)
+				for pnum := 1; pnum <= 150; pnum++ {
+					writer1.WriteString(timestamp + "," + strconv.FormatInt(int64(pnum), 10) + initFastAnalog[rand.Intn(10)] + "\n")
+				}
+				writer1.Flush()
+			}
+			file1.Close()
+		}()
+
+		file2, _ := os.OpenFile("../CSV/testFastDigital.csv", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		writer2 := bufio.NewWriter(file2) // 创建一个缓冲写入器
+		for t := 0; t < count; t += interval {
+			timestamp := strconv.FormatInt(int64(t), 10)
+			for pnum := 1; pnum <= 350; pnum++ {
+				writer2.WriteString(timestamp + "," + strconv.FormatInt(int64(pnum), 10) + initFastDigital[rand.Intn(10)] + "\n")
+			}
+			writer2.Flush() // 刷新缓冲区
+		}
+		file2.Close()
+	case 993:
+		// 普通点模拟量
+		initNormalAnalog := []string{
+			",300.51895612926927,300.51895612926927,False,True,True,300.51895612926927,True,b,17887",
+			",301.3360220914003,301.3360220914003,False,False,False,301.3360220914003,True,a,17986",
+			",301.7538845756861,301.7538845756861,False,True,False,301.7538845756861,False,l,9191",
+			",300.2033427340847,300.2033427340847,True,False,True,300.2033427340847,True,x,6441",
+			",300.78892701638114,300.78892701638114,False,True,False,300.78892701638114,True,w,23669",
+			",301.84380991325435,301.84380991325435,True,False,False,301.84380991325435,False,f,18677",
+			",300.4005546405889,300.4005546405889,True,True,False,300.4005546405889,True,y,59996",
+			",300.1198801800455,300.1198801800455,False,False,True,300.1198801800455,True,m,12539",
+			",302.7308889001857,302.7308889001857,False,False,False,302.7308889001857,True,w,48375",
+			",302.12840888273524,302.12840888273524,False,True,True,302.12840888273524,False,c,61816",
+		}
+		// 普通点数字量
+		initNormalDigital := []string{
+			",True,True,False,True,True,True,True,z,16697",
+			",True,True,True,True,False,True,True,i,39976",
+			",True,True,False,True,True,True,False,q,55019",
+			",True,True,False,True,True,True,True,w,109",
+			",False,False,False,True,False,False,True,u,10951",
+			",False,False,True,True,True,False,True,d,63064",
+			",True,True,False,False,True,True,True,n,37486",
+			",False,False,False,True,True,False,False,a,29801",
+			",True,True,True,False,False,True,True,r,36900",
+			",True,True,False,True,False,True,True,r,51645",
+		}
+		count := 1 * 60 * 60 * 1000
+		interval := 400
+
+		// 打开文件（以追加模式）
+		go func() {
+			file1, _ := os.OpenFile("../CSV/testNormalAnalog.csv", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			writer1 := bufio.NewWriter(file1) // 创建一个缓冲写入器
+			for t := 0; t < count; t += interval {
+				timestamp := strconv.FormatInt(int64(t), 10)
+				for pnum := 1; pnum <= 59850; pnum++ {
+					writer1.WriteString(timestamp + "," + strconv.FormatInt(int64(pnum), 10) + initNormalAnalog[rand.Intn(10)] + "\n")
+				}
+				writer1.Flush()
+			}
+			file1.Close()
+		}()
+
+		file2, _ := os.OpenFile("../CSV/testNormalDigital.csv", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		writer2 := bufio.NewWriter(file2) // 创建一个缓冲写入器
+		for t := 0; t < count; t += interval {
+			timestamp := strconv.FormatInt(int64(t), 10)
+			for pnum := 1; pnum <= 139650; pnum++ {
+				writer2.WriteString(timestamp + "," + strconv.FormatInt(int64(pnum), 10) + initNormalDigital[rand.Intn(10)] + "\n")
+			}
+			writer2.Flush() // 刷新缓冲区
+		}
+		file2.Close()
+
 	default:
 		fmt.Println("输入错误，无法执行")
 	}
@@ -437,7 +678,7 @@ func createMeasurements(isAnalog bool) {
 		measurements = []string{"P_NUM", "AV", "AVR", "Q", "BF", "QF", "FAI", "MS", "TEW", "CST"}
 		dataTypes = []client.TSDataType{client.INT32, client.FLOAT, client.FLOAT, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.FLOAT, client.BOOLEAN, client.TEXT, client.INT32}
 
-	}else{
+	} else {
 		measurements = []string{"P_NUM", "DV", "DVR", "Q", "BF", "FQ", "FAI", "MS", "TEW", "CST"}
 		dataTypes = []client.TSDataType{client.INT32, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.TEXT, client.INT32}
 	}
