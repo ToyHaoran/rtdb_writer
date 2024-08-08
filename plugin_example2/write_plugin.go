@@ -192,7 +192,7 @@ type Analog struct {
 	AVR       float32 // AVR, 4Byte
 	Q         bool    // Q, 1Byte
 	BF        bool    // BF, 1Byte
-	QF        bool    // QF, 1Byte
+	FQ        bool    // FQ, 1Byte
 	FAI       float32 // FAI, 4Byte
 	MS        bool    // MS, 1Byte
 	TEW       byte    // TEW, 1Byte
@@ -263,7 +263,7 @@ type Data struct {
 }
 
 func getAnalogSchema() []*client.MeasurementSchema {
-	measurements := []string{"P_NUM", "AV", "AVR", "Q", "BF", "QF", "FAI", "MS", "TEW", "CST"}
+	measurements := []string{"P_NUM", "AV", "AVR", "Q", "BF", "FQ", "FAI", "MS", "TEW", "CST"}
 	dataTypes := []client.TSDataType{client.INT32, client.FLOAT, client.FLOAT, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.FLOAT, client.BOOLEAN, client.TEXT, client.INT32}
 	measurementSchemas := make([]*client.MeasurementSchema, len(measurements))
 	for j := range measurements {
@@ -550,7 +550,7 @@ var tabletHisAnalog = make([]*client.Tablet, 31)
 var hisAnalogBatchCount = 0
 
 func getAnalogValues(an Analog) []interface{} {
-	return []interface{}{an.P_NUM, an.AV, an.AVR, an.Q, an.BF, an.QF, an.FAI, an.MS, string(an.TEW), int32(an.CST)}
+	return []interface{}{an.P_NUM, an.AV, an.AVR, an.Q, an.BF, an.FQ, an.FAI, an.MS, string(an.TEW), int32(an.CST)}
 }
 
 // 3写历史模拟量
@@ -565,7 +565,7 @@ func write_his_analog(magic C.int32_t, unit_id C.int64_t, timestamp C.int64_t, a
 	deviceCount := int64(count)
 	analogs := (*[1 << 30]Analog)(unsafe.Pointer(analog_array_ptr))[:deviceCount:deviceCount]
 
-	measurements := []string{"P_NUM", "AV", "AVR", "Q", "BF", "QF", "FAI", "MS", "TEW", "CST"}
+	measurements := []string{"P_NUM", "AV", "AVR", "Q", "BF", "FQ", "FAI", "MS", "TEW", "CST"}
 	dataTypes := []client.TSDataType{client.INT32, client.FLOAT, client.FLOAT, client.BOOLEAN, client.BOOLEAN, client.BOOLEAN, client.FLOAT, client.BOOLEAN, client.TEXT, client.INT32}
 	measurementSchemas := make([]*client.MeasurementSchema, len(measurements))
 	for j := range measurements {

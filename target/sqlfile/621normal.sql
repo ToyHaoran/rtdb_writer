@@ -1,0 +1,2 @@
+select P_NUM, AV, AVR, Q, BF, FQ, FAI, MS, TEW, CST from root.sg.unit0.normalA* where time > 1970-01-01T08:59:50 order by time asc align by device
+select P_NUM, DV, DVR, Q, BF, FQ, FAI, MS, TEW, CST from root.sg.unit0.normalD* where time > 1970-01-01T08:59:50 order by time asc align by device
