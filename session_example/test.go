@@ -49,7 +49,8 @@ var testID int
 var filePath string
 var periodic bool
 var exportSh = "/opt/software/iotdb-1.3.2/tools/export-data.sh"
-var startTimestamp int64 // 最新的时间戳
+var startTimestamp int64 // 开始的时间戳
+var startTime string     // 开始的时间字符串
 
 func main() {
 	flag.StringVar(&host, "host", "xty111", "--host=192.168.150.100")
@@ -59,8 +60,14 @@ func main() {
 	flag.IntVar(&testID, "testID", 0, "--testID=43")
 	flag.BoolVar(&periodic, "periodic", false, "--periodic=true")
 	flag.StringVar(&filePath, "filePath", "", "--filePath=../CSV/XXX.csv")
+	flag.StringVar(&startTime, "startTime", "", "--startTimes=1970-03-02T08:00:00")
 	flag.Int64Var(&startTimestamp, "startTimestamp", 0, "--startTimestamp=0")
 	flag.Parse()
+	if startTime != "" {
+		// 将开始时间字符串转为时间戳
+		stamp, _ := time.ParseInLocation("2006-01-02T15:04:05", startTime, time.Local)
+		startTimestamp = stamp.UnixMilli()
+	}
 	config := &client.PoolConfig{
 		Host:     host,
 		Port:     port,
@@ -200,10 +207,10 @@ func main() {
 		// 导出IOTDB数据
 		RunCommand(exportSh + " -h xty111 -p 6667 -u root -pw root -td ../CSV2/record100 -s ./sqlfile/651.sql -tf timestamp -linesPerFile 400")
 		// 导出源数据
-		exec.Command("bash", "-c", "tail -n 100 "+ sourceFiles[0] + " | tac | cat > ../CSV2/record100/testFastAnalog.csv").Run()
-		exec.Command("bash", "-c", "tail -n 100 "+ sourceFiles[1] + " | tac | cat > ../CSV2/record100/testFastDigital.csv").Run()
-		exec.Command("bash", "-c", "tail -n 100 "+ sourceFiles[2] + " | tac | cat > ../CSV2/record100/testNormalAnalog.csv").Run()
-		exec.Command("bash", "-c", "tail -n 100 "+ sourceFiles[3] + " | tac | cat > ../CSV2/record100/testNormalDigital.csv").Run()
+		exec.Command("bash", "-c", "tail -n 100 "+sourceFiles[0]+" | tac | cat > ../CSV2/record100/testFastAnalog.csv").Run()
+		exec.Command("bash", "-c", "tail -n 100 "+sourceFiles[1]+" | tac | cat > ../CSV2/record100/testFastDigital.csv").Run()
+		exec.Command("bash", "-c", "tail -n 100 "+sourceFiles[2]+" | tac | cat > ../CSV2/record100/testNormalAnalog.csv").Run()
+		exec.Command("bash", "-c", "tail -n 100 "+sourceFiles[3]+" | tac | cat > ../CSV2/record100/testNormalDigital.csv").Run()
 		fmt.Println("开始对比FastAnalog数据...")
 		verifyAnalogData("../CSV2/record100/dump0_0.csv", "../CSV2/record100/testFastAnalog.csv")
 		fmt.Println("开始对比FastDigital数据...")
@@ -522,7 +529,7 @@ func verifyAnalogData(exportFile string, sourceFile string) {
 				newRow := append(row1[:1], row1[2:]...)
 				remain4(newRow)
 				row1Ch <- newRow
-			}else {
+			} else {
 				remain4(row1)
 				row1Ch <- row1
 			}
@@ -596,7 +603,7 @@ func verifyDigitalData(exportFile string, sourceFile string) {
 			if len(row1) == 12 {
 				newRow := append(row1[:1], row1[2:]...)
 				row1Ch <- newRow
-			}else {
+			} else {
 				row1Ch <- row1
 			}
 		}
@@ -719,6 +726,7 @@ func insertData44(csvPath string) {
 	tablet, err := client.NewTablet(device, measurementSchemas, 100000)
 	checkError(nil, err)
 	rowNum := 0
+	pretimestamp := int64(-400)
 	for {
 		rec, err := csvReader.Read()
 		if err == io.EOF {
@@ -728,6 +736,28 @@ func insertData44(csvPath string) {
 			continue // 去除首行和空行
 		}
 		timestamp, err := strconv.ParseInt(rec[0], 10, 64)
+
+		// ####产生缺失的数据集
+		for {
+			if timestamp != pretimestamp+400 {
+				session, _ := sessionPool.GetSession()
+				checkError(session.InsertRecord(device, []string{"DATA2"},
+					[]client.TSDataType{client.DOUBLE}, []interface{}{0.0}, (pretimestamp+400)*1000000))
+				sessionPool.PutBack(session)
+				checkError(nil, err)
+				//tablet.SetTimestamp((pretimestamp+400)*1000000, rowNum)
+				//err = tablet.SetValueAt(nil, 0, rowNum)
+				//checkError(nil, err)
+				//tablet.RowSize++
+				//rowNum++
+				pretimestamp += 400
+			} else {
+				break
+			}
+		}
+		pretimestamp = timestamp
+		// ##########
+
 		checkError(nil, err)
 		data, err := strconv.ParseFloat(strings.TrimSpace(rec[1]), 64)
 		checkError(nil, err)
