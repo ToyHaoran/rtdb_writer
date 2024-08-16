@@ -182,7 +182,7 @@ func insertData(data Data) {
 // insertTable 封装为tablet插入
 func insertTable(tablet *client.Tablet) {
 	session, _ := sessionPool.GetSession()
-	session.InsertTablet(tablet, false)
+	checkError(session.InsertTablet(tablet, false))
 	sessionPool.PutBack(session)
 }
 
@@ -740,7 +740,6 @@ func checkError(status *rpc.TSStatus, err error) {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	if status != nil {
 		if err = client.VerifySuccess(status); err != nil {
 			log.Println(err)

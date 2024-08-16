@@ -1,3 +1,4 @@
+create TIMESERIES  root.test.d619.s0 datatype=INT32 encoding=PLAIN;
 insert into root.test.d619(s0) values (1);
 insert into root.test.d619(s0) values (2);
 

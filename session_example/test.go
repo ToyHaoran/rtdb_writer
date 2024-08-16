@@ -48,12 +48,12 @@ var sessionPool client.SessionPool
 var testID int
 var filePath string
 var periodic bool
-var exportSh = "/opt/software/iotdb-1.3.2/tools/export-data.sh"
+var exportSh = "/opt/soft/iotdb-enterprise-1.3.3.1-bin/tools/export-data.sh"
 var startTimestamp int64 // 开始的时间戳
 var startTime string     // 开始的时间字符串
 
 func main() {
-	flag.StringVar(&host, "host", "xty111", "--host=192.168.150.100")
+	flag.StringVar(&host, "host", "192.168.11.102", "--host=192.168.150.100")
 	flag.StringVar(&port, "port", "6667", "--port=6667")
 	flag.StringVar(&user, "user", "root", "--user=root")
 	flag.StringVar(&password, "password", "root", "--password=root")
@@ -98,13 +98,13 @@ func main() {
 		//RunCommand("rm -rf ../CSV2/*")
 		RunCommand("mkdir -p ../CSV2/his")
 		// 导出IOTDB数据
-		RunCommand(exportSh + " -h xty111 -p 6667 -u root -pw root -td ../CSV2/his -s ./sqlfile/613.sql -tf timestamp -linesPerFile 50000")
+		RunCommand(exportSh + " -h " + host + " -p 6667 -u root -pw root -t ../CSV2/his -s ./sqlfile/613.sql -tf timestamp -lpf 50000")
 		// 原始数据太大，用tail将最后n行导出。 tail -n 30000 ../CSV/testHisAnalog.csv > ../CSV2/his/testHisAnalog.csv
 		sourceFiles := strings.Split(filePath, ",")
-		cmd1 := exec.Command("tail", "-n", "20000", sourceFiles[0]) //  2.5*60秒*30测点
+		cmd1 := exec.Command("bash", "-c", "tail -n 20000 "+sourceFiles[0]+" | tr -d '\r\n'") //  2.5*60秒*30测点
 		cmd1.Stdout, _ = os.Create("../CSV2/his/testHisAnalog.csv")
 		cmd1.Run()
-		cmd2 := exec.Command("tail", "-n", "20000", sourceFiles[1]) //  2.5*60秒*70测点
+		cmd2 := exec.Command("bash", "-c", "tail -n 20000 "+sourceFiles[1]+" | tr -d '\r\n'") //  2.5*60秒*70测点
 		cmd2.Stdout, _ = os.Create("../CSV2/his/testHisDigital.csv")
 		cmd2.Run()
 		// 逐条对比模拟数据
@@ -163,13 +163,13 @@ func main() {
 		RunCommand("mkdir -p ../CSV2/fast")
 		RunCommand("mkdir -p ../CSV2/normal")
 		sourceFiles := strings.Split(filePath, ",")
-		if len(sourceFiles) == 4 || (len(sourceFiles) == 2 && strings.Contains(sourceFiles[0], "Fast")) {
+		if len(sourceFiles) == 4 || (len(sourceFiles) == 2 && strings.Contains(sourceFiles[0], "FAST")) {
 			// 导出IOTDB数据
-			RunCommand(exportSh + " -h xty111 -p 6667 -u root -pw root -td ../CSV2/fast -s ./sqlfile/621fast.sql -tf timestamp -linesPerFile 4000000")
-			cmd1 := exec.Command("tail", "-n", "1550000", sourceFiles[0]) //  1000*10秒*150测点
+			RunCommand(exportSh + " -h " + host + " -p 6667 -u root -pw root -t ../CSV2/fast -s ./sqlfile/621fast.sql -tf timestamp -lpf 4000000")
+			cmd1 := exec.Command("bash", "-c", "tail -n 1550000 "+sourceFiles[0]+" | tr -d '\r\n'") //  1000*10秒*150测点
 			cmd1.Stdout, _ = os.Create("../CSV2/fast/testFastAnalog.csv")
 			cmd1.Run()
-			cmd2 := exec.Command("tail", "-n", "3550000", sourceFiles[1]) //  1000*10秒*350测点
+			cmd2 := exec.Command("bash", "-c", "tail -n 3550000 "+sourceFiles[1]+" | tr -d '\r\n'") //  1000*10秒*350测点
 			cmd2.Stdout, _ = os.Create("../CSV2/fast/testFastDigital.csv")
 			cmd2.Run()
 			fmt.Println("开始对比FastAnalog数据...")
@@ -177,7 +177,7 @@ func main() {
 			fmt.Println("开始对比FastDigital数据...")
 			verifyDigitalData("../CSV2/fast/dump1_0.csv", "../CSV2/fast/testFastDigital.csv")
 		}
-		if len(sourceFiles) == 4 || (len(sourceFiles) == 2 && strings.Contains(sourceFiles[0], "Normal")) {
+		if len(sourceFiles) == 4 || (len(sourceFiles) == 2 && strings.Contains(sourceFiles[0], "NORMAL")) {
 			var src0, src1 string
 			if len(sourceFiles) == 4 {
 				src0 = sourceFiles[2]
@@ -186,11 +186,11 @@ func main() {
 				src0 = sourceFiles[0]
 				src1 = sourceFiles[1]
 			}
-			RunCommand(exportSh + " -h xty111 -p 6667 -u root -pw root -td ../CSV2/normal -s ./sqlfile/621normal.sql -tf timestamp -linesPerFile 4000000")
-			cmd3 := exec.Command("tail", "-n", "1550000", src0) //  2.5*10秒*60000测点
+			RunCommand(exportSh + " -h " + host + " -p 6667 -u root -pw root -t ../CSV2/normal -s ./sqlfile/621normal.sql -tf timestamp -lpf 4000000")
+			cmd3 := exec.Command("bash", "-c", "tail -n 1550000 "+src0+" | tr -d '\r\n'") //  2.5*10秒*60000测点
 			cmd3.Stdout, _ = os.Create("../CSV2/normal/testNormalAnalog.csv")
 			cmd3.Run()
-			cmd4 := exec.Command("tail", "-n", "3550000", src1) //  2.5*10秒*140000测点
+			cmd4 := exec.Command("bash", "-c", "tail -n 3550000 "+src1+" | tr -d '\r\n'") //  2.5*10秒*140000测点
 			cmd4.Stdout, _ = os.Create("../CSV2/normal/testNormalDigital.csv")
 			cmd4.Run()
 			fmt.Println("开始对比NormalAnalog数据...")
@@ -205,12 +205,12 @@ func main() {
 		RunCommand("mkdir -p ../CSV2/record100")
 		sourceFiles := strings.Split(filePath, ",")
 		// 导出IOTDB数据
-		RunCommand(exportSh + " -h xty111 -p 6667 -u root -pw root -td ../CSV2/record100 -s ./sqlfile/651.sql -tf timestamp -linesPerFile 400")
+		RunCommand(exportSh + " -h " + host + " -p 6667 -u root -pw root -t ../CSV2/record100 -s ./sqlfile/651.sql -tf timestamp -lpf 400")
 		// 导出源数据
-		exec.Command("bash", "-c", "tail -n 100 "+sourceFiles[0]+" | tac | cat > ../CSV2/record100/testFastAnalog.csv").Run()
-		exec.Command("bash", "-c", "tail -n 100 "+sourceFiles[1]+" | tac | cat > ../CSV2/record100/testFastDigital.csv").Run()
-		exec.Command("bash", "-c", "tail -n 100 "+sourceFiles[2]+" | tac | cat > ../CSV2/record100/testNormalAnalog.csv").Run()
-		exec.Command("bash", "-c", "tail -n 100 "+sourceFiles[3]+" | tac | cat > ../CSV2/record100/testNormalDigital.csv").Run()
+		exec.Command("bash", "-c", "tail -n 100 "+sourceFiles[0]+" | tr -d '\r\n' | tac | cat > ../CSV2/record100/testFastAnalog.csv").Run()
+		exec.Command("bash", "-c", "tail -n 100 "+sourceFiles[1]+" | tr -d '\r\n' | tac | cat > ../CSV2/record100/testFastDigital.csv").Run()
+		exec.Command("bash", "-c", "tail -n 100 "+sourceFiles[2]+" | tr -d '\r\n' | tac | cat > ../CSV2/record100/testNormalAnalog.csv").Run()
+		exec.Command("bash", "-c", "tail -n 100 "+sourceFiles[3]+" | tr -d '\r\n' | tac | cat > ../CSV2/record100/testNormalDigital.csv").Run()
 		fmt.Println("开始对比FastAnalog数据...")
 		verifyAnalogData("../CSV2/record100/dump0_0.csv", "../CSV2/record100/testFastAnalog.csv")
 		fmt.Println("开始对比FastDigital数据...")
@@ -533,7 +533,6 @@ func verifyAnalogData(exportFile string, sourceFile string) {
 				remain4(row1)
 				row1Ch <- row1
 			}
-
 		}
 	}()
 	boolLower := func(row []string) {

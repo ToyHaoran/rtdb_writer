@@ -1,2 +1,2 @@
-select P_NUM, AV, AVR, Q, BF, FQ, FAI, MS, TEW, CST from root.sg.unit0.historyA.d1 where time >= 1970-03-02T07:59:00
-select P_NUM, DV, DVR, Q, BF, FQ, FAI, MS, TEW, CST from root.sg.unit0.historyD.d1 where time >= 1970-03-02T07:59:00
+select P_NUM, AV, AVR, Q, BF, FQ, FAI, MS, TEW, CST from root.sg.unit0.historyA.d1 where time >= 1971-01-01T07:59:00
+select P_NUM, DV, DVR, Q, BF, FQ, FAI, MS, TEW, CST from root.sg.unit0.historyD.d1 where time >= 1971-01-01T07:59:00
