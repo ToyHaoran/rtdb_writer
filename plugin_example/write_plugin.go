@@ -262,7 +262,7 @@ func write_rt_analog(magic C.int32_t, unit_id C.int64_t, timestamp C.int64_t, an
 			// 普通点数据量巨大，时间序列融合  一秒15万条数据。
 			// 写实时模拟量OK，插入59850条数据，约60万测点
 			visualDeviceCount := int64(50) // 虚拟设备数量0～50
-			// TODO 如果PNUM是乱序来的怎么办，可以直接放到一个设备中，也可以根据设备%batchSize求余，放在对应table中
+			// 如果PNUM是乱序来的怎么办，直接放到一个设备中，也可以根据设备%batchSize求余，放在对应table中
 			normalBatchSize := deviceCount / visualDeviceCount
 			var wgslow sync.WaitGroup
 			for num := int64(0); num <= visualDeviceCount; num++ {
@@ -738,6 +738,7 @@ func write_static_digital(magic C.int32_t, unit_id C.int64_t, static_digital_arr
 
 func checkError(status *rpc.TSStatus, err error) {
 	if err != nil {
+		fmt.Println("write")
 		log.Fatal(err)
 	}
 	if status != nil {

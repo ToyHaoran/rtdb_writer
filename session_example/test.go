@@ -101,10 +101,10 @@ func main() {
 		RunCommand(exportSh + " -h " + host + " -p 6667 -u root -pw root -t ../CSV2/his -s ./sqlfile/613.sql -tf timestamp -lpf 50000")
 		// 原始数据太大，用tail将最后n行导出。 tail -n 30000 ../CSV/testHisAnalog.csv > ../CSV2/his/testHisAnalog.csv
 		sourceFiles := strings.Split(filePath, ",")
-		cmd1 := exec.Command("bash", "-c", "tail -n 20000 "+sourceFiles[0]+" | tr -d '\r\n'") //  2.5*60秒*30测点
+		cmd1 := exec.Command("bash", "-c", "tail -n 20000 "+sourceFiles[0]+" | tr -d '\r'") //  2.5*60秒*30测点
 		cmd1.Stdout, _ = os.Create("../CSV2/his/testHisAnalog.csv")
 		cmd1.Run()
-		cmd2 := exec.Command("bash", "-c", "tail -n 20000 "+sourceFiles[1]+" | tr -d '\r\n'") //  2.5*60秒*70测点
+		cmd2 := exec.Command("bash", "-c", "tail -n 20000 "+sourceFiles[1]+" | tr -d '\r'") //  2.5*60秒*70测点
 		cmd2.Stdout, _ = os.Create("../CSV2/his/testHisDigital.csv")
 		cmd2.Run()
 		// 逐条对比模拟数据
@@ -166,10 +166,10 @@ func main() {
 		if len(sourceFiles) == 4 || (len(sourceFiles) == 2 && strings.Contains(sourceFiles[0], "FAST")) {
 			// 导出IOTDB数据
 			RunCommand(exportSh + " -h " + host + " -p 6667 -u root -pw root -t ../CSV2/fast -s ./sqlfile/621fast.sql -tf timestamp -lpf 4000000")
-			cmd1 := exec.Command("bash", "-c", "tail -n 1550000 "+sourceFiles[0]+" | tr -d '\r\n'") //  1000*10秒*150测点
+			cmd1 := exec.Command("bash", "-c", "tail -n 1550000 "+sourceFiles[0]+" | tr -d '\r'") //  1000*10秒*150测点
 			cmd1.Stdout, _ = os.Create("../CSV2/fast/testFastAnalog.csv")
 			cmd1.Run()
-			cmd2 := exec.Command("bash", "-c", "tail -n 3550000 "+sourceFiles[1]+" | tr -d '\r\n'") //  1000*10秒*350测点
+			cmd2 := exec.Command("bash", "-c", "tail -n 3550000 "+sourceFiles[1]+" | tr -d '\r'") //  1000*10秒*350测点
 			cmd2.Stdout, _ = os.Create("../CSV2/fast/testFastDigital.csv")
 			cmd2.Run()
 			fmt.Println("开始对比FastAnalog数据...")
@@ -187,10 +187,10 @@ func main() {
 				src1 = sourceFiles[1]
 			}
 			RunCommand(exportSh + " -h " + host + " -p 6667 -u root -pw root -t ../CSV2/normal -s ./sqlfile/621normal.sql -tf timestamp -lpf 4000000")
-			cmd3 := exec.Command("bash", "-c", "tail -n 1550000 "+src0+" | tr -d '\r\n'") //  2.5*10秒*60000测点
+			cmd3 := exec.Command("bash", "-c", "tail -n 1550000 "+src0+" | tr -d '\r'") //  2.5*10秒*60000测点
 			cmd3.Stdout, _ = os.Create("../CSV2/normal/testNormalAnalog.csv")
 			cmd3.Run()
-			cmd4 := exec.Command("bash", "-c", "tail -n 3550000 "+src1+" | tr -d '\r\n'") //  2.5*10秒*140000测点
+			cmd4 := exec.Command("bash", "-c", "tail -n 3550000 "+src1+" | tr -d '\r'") //  2.5*10秒*140000测点
 			cmd4.Stdout, _ = os.Create("../CSV2/normal/testNormalDigital.csv")
 			cmd4.Run()
 			fmt.Println("开始对比NormalAnalog数据...")
@@ -207,10 +207,10 @@ func main() {
 		// 导出IOTDB数据
 		RunCommand(exportSh + " -h " + host + " -p 6667 -u root -pw root -t ../CSV2/record100 -s ./sqlfile/651.sql -tf timestamp -lpf 400")
 		// 导出源数据
-		exec.Command("bash", "-c", "tail -n 100 "+sourceFiles[0]+" | tr -d '\r\n' | tac | cat > ../CSV2/record100/testFastAnalog.csv").Run()
-		exec.Command("bash", "-c", "tail -n 100 "+sourceFiles[1]+" | tr -d '\r\n' | tac | cat > ../CSV2/record100/testFastDigital.csv").Run()
-		exec.Command("bash", "-c", "tail -n 100 "+sourceFiles[2]+" | tr -d '\r\n' | tac | cat > ../CSV2/record100/testNormalAnalog.csv").Run()
-		exec.Command("bash", "-c", "tail -n 100 "+sourceFiles[3]+" | tr -d '\r\n' | tac | cat > ../CSV2/record100/testNormalDigital.csv").Run()
+		exec.Command("bash", "-c", "tail -n 100 "+sourceFiles[0]+" | tr -d '\r' | tac | cat > ../CSV2/record100/testFastAnalog.csv").Run()
+		exec.Command("bash", "-c", "tail -n 100 "+sourceFiles[1]+" | tr -d '\r' | tac | cat > ../CSV2/record100/testFastDigital.csv").Run()
+		exec.Command("bash", "-c", "tail -n 100 "+sourceFiles[2]+" | tr -d '\r' | tac | cat > ../CSV2/record100/testNormalAnalog.csv").Run()
+		exec.Command("bash", "-c", "tail -n 100 "+sourceFiles[3]+" | tr -d '\r' | tac | cat > ../CSV2/record100/testNormalDigital.csv").Run()
 		fmt.Println("开始对比FastAnalog数据...")
 		verifyAnalogData("../CSV2/record100/dump0_0.csv", "../CSV2/record100/testFastAnalog.csv")
 		fmt.Println("开始对比FastDigital数据...")
