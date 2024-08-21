@@ -738,7 +738,6 @@ func write_static_digital(magic C.int32_t, unit_id C.int64_t, static_digital_arr
 
 func checkError(status *rpc.TSStatus, err error) {
 	if err != nil {
-		fmt.Println("write")
 		log.Fatal(err)
 	}
 	if status != nil {

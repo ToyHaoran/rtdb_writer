@@ -34,6 +34,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -51,6 +52,8 @@ var periodic bool
 var exportSh = "/opt/soft/iotdb-enterprise-1.3.3.1-bin/tools/export-data.sh"
 var startTimestamp int64 // 开始的时间戳
 var startTime string     // 开始的时间字符串
+var fastSectionCount int64
+var normalSectionCount int64
 
 func main() {
 	flag.StringVar(&host, "host", "192.168.11.102", "--host=192.168.150.100")
@@ -62,6 +65,8 @@ func main() {
 	flag.StringVar(&filePath, "filePath", "", "--filePath=../CSV/XXX.csv")
 	flag.StringVar(&startTime, "startTime", "", "--startTimes=1970-03-02T08:00:00")
 	flag.Int64Var(&startTimestamp, "startTimestamp", 0, "--startTimestamp=0")
+	flag.Int64Var(&fastSectionCount, "fastSectionCount", 0, "--fastSectionCount=0")
+	flag.Int64Var(&normalSectionCount, "normalSectionCount", 0, "--normalSectionCount=0")
 	flag.Parse()
 	if startTime != "" {
 		// 将开始时间字符串转为时间戳
@@ -101,10 +106,10 @@ func main() {
 		RunCommand(exportSh + " -h " + host + " -p 6667 -u root -pw root -t ../CSV2/his -s ./sqlfile/613.sql -tf timestamp -lpf 50000")
 		// 原始数据太大，用tail将最后n行导出。 tail -n 30000 ../CSV/testHisAnalog.csv > ../CSV2/his/testHisAnalog.csv
 		sourceFiles := strings.Split(filePath, ",")
-		cmd1 := exec.Command("bash", "-c", "tail -n 20000 "+sourceFiles[0]+" | tr -d '\r'") //  2.5*60秒*30测点
+		cmd1 := exec.Command("bash", "-c", "tail -n 20000 "+sourceFiles[0]+" | tr -d '\\r'") //  2.5*60秒*30测点
 		cmd1.Stdout, _ = os.Create("../CSV2/his/testHisAnalog.csv")
 		cmd1.Run()
-		cmd2 := exec.Command("bash", "-c", "tail -n 20000 "+sourceFiles[1]+" | tr -d '\r'") //  2.5*60秒*70测点
+		cmd2 := exec.Command("bash", "-c", "tail -n 20000 "+sourceFiles[1]+" | tr -d '\\r'") //  2.5*60秒*70测点
 		cmd2.Stdout, _ = os.Create("../CSV2/his/testHisDigital.csv")
 		cmd2.Run()
 		// 逐条对比模拟数据
@@ -154,6 +159,39 @@ func main() {
 		timeStart, err := time.Parse("2006-01-02 15:04:05", "2024-06-28 00:00:00")
 		checkError(nil, err)
 		createAndInsertData(2*30*24*3600, timeStart, interval, device, measurements, dataTypes)
+	case 6114:
+		// ./test --testID=6114 --host=192.168.1.112 --filePath=../CSV/1721454092945_HISTORY_NORMAL_ANALOG.csv,../CSV/1721454092945_HISTORY_NORMAL_DIGITAL.csv
+		// 先删除已导出的数据 或 创建新目录
+		RunCommand("mkdir -p ../CSV2/his96")
+		// 导出IOTDB数据，分时间区间导出。
+		RunCommand(exportSh + " -h " + host + " -p 6667 -u root -pw root -t ../CSV2/his96 -s ./sqlfile/6114.sql -tf timestamp -lpf 40000000")
+		// 合并文件（一个600M）
+		exec.Command("bash", "-c", "cat ../CSV2/his96/dump1_0.csv >> ../CSV2/his96/dump0_0.csv && rm -rf ../CSV2/his96/dump1_0.csv").Run()
+		exec.Command("bash", "-c", "cat ../CSV2/his96/dump2_0.csv >> ../CSV2/his96/dump0_0.csv && rm -rf ../CSV2/his96/dump2_0.csv").Run()
+		exec.Command("bash", "-c", "cat ../CSV2/his96/dump3_0.csv >> ../CSV2/his96/dump0_0.csv && rm -rf ../CSV2/his96/dump3_0.csv").Run()
+		exec.Command("bash", "-c", "cat ../CSV2/his96/dump5_0.csv >> ../CSV2/his96/dump4_0.csv && rm -rf ../CSV2/his96/dump5_0.csv").Run()
+		exec.Command("bash", "-c", "cat ../CSV2/his96/dump6_0.csv >> ../CSV2/his96/dump4_0.csv && rm -rf ../CSV2/his96/dump6_0.csv").Run()
+		exec.Command("bash", "-c", "cat ../CSV2/his96/dump7_0.csv >> ../CSV2/his96/dump4_0.csv && rm -rf ../CSV2/his96/dump7_0.csv").Run()
+		exec.Command("bash", "-c", "cat ../CSV2/his96/dump8_0.csv >> ../CSV2/his96/dump4_0.csv && rm -rf ../CSV2/his96/dump8_0.csv").Run()
+		exec.Command("bash", "-c", "cat ../CSV2/his96/dump9_0.csv >> ../CSV2/his96/dump4_0.csv && rm -rf ../CSV2/his96/dump9_0.csv").Run()
+		exec.Command("bash", "-c", "cat ../CSV2/his96/dump10_0.csv >> ../CSV2/his96/dump4_0.csv && rm -rf ../CSV2/his96/dump10_0.csv").Run()
+		exec.Command("bash", "-c", "cat ../CSV2/his96/dump11_0.csv >> ../CSV2/his96/dump4_0.csv && rm -rf ../CSV2/his96/dump11_0.csv").Run()
+		fmt.Println("合并文件完成...")
+		// 原始数据太大，用head将前面n行导出。2.5*60秒*60*24*4*30或70
+		sourceFiles := strings.Split(filePath, ",")
+		cmd1 := exec.Command("bash", "-c", "head -n 26000000 "+sourceFiles[0]+" | tr -d '\\r'")
+		cmd1.Stdout, _ = os.Create("../CSV2/his96/testHisAnalog.csv")
+		cmd1.Run()
+		cmd2 := exec.Command("bash", "-c", "head -n 62000000 "+sourceFiles[1]+" | tr -d '\\r'")
+		cmd2.Stdout, _ = os.Create("../CSV2/his96/testHisDigital.csv")
+		cmd2.Run()
+		fmt.Println("导出原始数据完成...")
+		// 逐条对比模拟数据
+		fmt.Println("开始对比Analog数据...")
+		verifyAnalogDataHis96("../CSV2/his96/dump0_0.csv", "../CSV2/his96/testHisAnalog.csv")
+		fmt.Println("开始对比Digital数据...")
+		verifyDigitalDataHis96("../CSV2/his96/dump4_0.csv", "../CSV2/his96/testHisDigital.csv")
+
 	case 621:
 		fallthrough
 	case 622:
@@ -166,10 +204,10 @@ func main() {
 		if len(sourceFiles) == 4 || (len(sourceFiles) == 2 && strings.Contains(sourceFiles[0], "FAST")) {
 			// 导出IOTDB数据
 			RunCommand(exportSh + " -h " + host + " -p 6667 -u root -pw root -t ../CSV2/fast -s ./sqlfile/621fast.sql -tf timestamp -lpf 4000000")
-			cmd1 := exec.Command("bash", "-c", "tail -n 1550000 "+sourceFiles[0]+" | tr -d '\r'") //  1000*10秒*150测点
+			cmd1 := exec.Command("bash", "-c", "tail -n 1550000 "+sourceFiles[0]+" | tr -d '\\r'") //  1000*10秒*150测点
 			cmd1.Stdout, _ = os.Create("../CSV2/fast/testFastAnalog.csv")
 			cmd1.Run()
-			cmd2 := exec.Command("bash", "-c", "tail -n 3550000 "+sourceFiles[1]+" | tr -d '\r'") //  1000*10秒*350测点
+			cmd2 := exec.Command("bash", "-c", "tail -n 3550000 "+sourceFiles[1]+" | tr -d '\\r'") //  1000*10秒*350测点
 			cmd2.Stdout, _ = os.Create("../CSV2/fast/testFastDigital.csv")
 			cmd2.Run()
 			fmt.Println("开始对比FastAnalog数据...")
@@ -187,10 +225,10 @@ func main() {
 				src1 = sourceFiles[1]
 			}
 			RunCommand(exportSh + " -h " + host + " -p 6667 -u root -pw root -t ../CSV2/normal -s ./sqlfile/621normal.sql -tf timestamp -lpf 4000000")
-			cmd3 := exec.Command("bash", "-c", "tail -n 1550000 "+src0+" | tr -d '\r'") //  2.5*10秒*60000测点
+			cmd3 := exec.Command("bash", "-c", "tail -n 1550000 "+src0+" | tr -d '\\r'") //  2.5*10秒*60000测点
 			cmd3.Stdout, _ = os.Create("../CSV2/normal/testNormalAnalog.csv")
 			cmd3.Run()
-			cmd4 := exec.Command("bash", "-c", "tail -n 3550000 "+src1+" | tr -d '\r'") //  2.5*10秒*140000测点
+			cmd4 := exec.Command("bash", "-c", "tail -n 3550000 "+src1+" | tr -d '\\r'") //  2.5*10秒*140000测点
 			cmd4.Stdout, _ = os.Create("../CSV2/normal/testNormalDigital.csv")
 			cmd4.Run()
 			fmt.Println("开始对比NormalAnalog数据...")
@@ -200,17 +238,44 @@ func main() {
 		}
 	case 651:
 		// 验证实时数据集是否一致
-		// ./test --testID=651 --startTimestamp=0 --filePath=../CSV/testFastAnalog.csv,../CSV/testFastDigital.csv,../CSV/testNormalAnalog.csv,../CSV/testNormalDigital.csv
+		// ./test --testID=651 --host=192.168.1.112 --fastSectionCount=40400 --normalSectionCount=102 --filePath=../CSV/1721454092945_REALTIME_FAST_ANALOG.csv,../CSV/1721454092945_REALTIME_FAST_DIGITAL.csv,../CSV/1721454092945_REALTIME_NORMAL_ANALOG.csv,../CSV/1721454092945_REALTIME_NORMAL_DIGITAL.csv
 		// 先删除已导出的数据 或 创建新目录
 		RunCommand("mkdir -p ../CSV2/record100")
 		sourceFiles := strings.Split(filePath, ",")
 		// 导出IOTDB数据
 		RunCommand(exportSh + " -h " + host + " -p 6667 -u root -pw root -t ../CSV2/record100 -s ./sqlfile/651.sql -tf timestamp -lpf 400")
-		// 导出源数据
-		exec.Command("bash", "-c", "tail -n 100 "+sourceFiles[0]+" | tr -d '\r' | tac | cat > ../CSV2/record100/testFastAnalog.csv").Run()
-		exec.Command("bash", "-c", "tail -n 100 "+sourceFiles[1]+" | tr -d '\r' | tac | cat > ../CSV2/record100/testFastDigital.csv").Run()
-		exec.Command("bash", "-c", "tail -n 100 "+sourceFiles[2]+" | tr -d '\r' | tac | cat > ../CSV2/record100/testNormalAnalog.csv").Run()
-		exec.Command("bash", "-c", "tail -n 100 "+sourceFiles[3]+" | tr -d '\r' | tac | cat > ../CSV2/record100/testNormalDigital.csv").Run()
+		// 导出源数据(因为数据起始和条数不同，需要最大参数)
+		fastAEnd := fastSectionCount*150 + 1
+		fastAStart := fastAEnd - 100
+		fastDEnd := fastSectionCount*350 + 1
+		fastDStart := fastDEnd - 100
+		normalAEnd := normalSectionCount*59850 + 1
+		normalAStart := normalAEnd - 100
+		normalDEnd := normalSectionCount*139650 + 1
+		normalDStart := normalDEnd - 100
+		var wg4 sync.WaitGroup
+		wg4.Add(4)
+		go func() {
+			exec.Command("bash", "-c", "sed -n '"+strconv.FormatInt(fastAStart, 10)+","+strconv.FormatInt(fastAEnd, 10)+"p' "+sourceFiles[0]+" | tr -d '\\r' | tac  > ../CSV2/record100/testFastAnalog.csv").Run()
+			fmt.Println("导出FastAnalog数据完成。")
+			wg4.Done()
+		}()
+		go func() {
+			exec.Command("bash", "-c", "sed -n '"+strconv.FormatInt(fastDStart, 10)+","+strconv.FormatInt(fastDEnd, 10)+"p' "+sourceFiles[1]+" | tr -d '\\r' | tac  > ../CSV2/record100/testFastDigital.csv").Run()
+			fmt.Println("导出FastDigital数据完成。")
+			wg4.Done()
+		}()
+		go func() {
+			exec.Command("bash", "-c", "sed -n '"+strconv.FormatInt(normalAStart, 10)+","+strconv.FormatInt(normalAEnd, 10)+"p' "+sourceFiles[2]+" | tr -d '\\r' | tac  > ../CSV2/record100/testNormalAnalog.csv").Run()
+			fmt.Println("导出NormalAnalog数据完成。")
+			wg4.Done()
+		}()
+		go func() {
+			exec.Command("bash", "-c", "sed -n '"+strconv.FormatInt(normalDStart, 10)+","+strconv.FormatInt(normalDEnd, 10)+"p' "+sourceFiles[3]+" | tr -d '\\r' | tac  > ../CSV2/record100/testNormalDigital.csv").Run()
+			fmt.Println("导出NormalDigital数据完成。")
+			wg4.Done()
+		}()
+		wg4.Wait()
 		fmt.Println("开始对比FastAnalog数据...")
 		verifyAnalogData("../CSV2/record100/dump0_0.csv", "../CSV2/record100/testFastAnalog.csv")
 		fmt.Println("开始对比FastDigital数据...")
@@ -219,7 +284,6 @@ func main() {
 		verifyAnalogData("../CSV2/record100/dump2_0.csv", "../CSV2/record100/testNormalAnalog.csv")
 		fmt.Println("开始对比NormalDigital数据...")
 		verifyDigitalData("../CSV2/record100/dump3_0.csv", "../CSV2/record100/testNormalDigital.csv")
-
 	case 6281:
 		// 循环创建测点
 		createMeasurements(true)
@@ -504,11 +568,11 @@ func verifyAnalogData(exportFile string, sourceFile string) {
 	reader2 := csv.NewReader(file2)
 	row1Ch := make(chan []string)
 	row2Ch := make(chan []string)
-	remain4 := func(row []string) {
+	remain5 := func(row []string) {
 		// 保留n位小数
 		for _, index := range []int{2, 3, 7} {
-			t1, _ := strconv.ParseFloat(row[index], 64)
-			row[index] = fmt.Sprintf("%.3f", t1)
+			t1, _ := strconv.ParseFloat(row[index], 32)
+			row[index] = fmt.Sprintf("%.5f", t1)
 		}
 	}
 	// 处理导出的数据
@@ -527,10 +591,10 @@ func verifyAnalogData(exportFile string, sourceFile string) {
 			//去掉normal设备列
 			if len(row1) == 12 {
 				newRow := append(row1[:1], row1[2:]...)
-				remain4(newRow)
+				remain5(newRow)
 				row1Ch <- newRow
 			} else {
-				remain4(row1)
+				remain5(row1)
 				row1Ch <- row1
 			}
 		}
@@ -559,7 +623,7 @@ func verifyAnalogData(exportFile string, sourceFile string) {
 					timestamp, _ := strconv.ParseInt(row2[0], 10, 64)
 					// 最近一分钟
 					if timestamp >= startTimestamp {
-						remain4(row2)
+						remain5(row2)
 						boolLower(row2)
 						row2Ch <- row2
 					}
@@ -567,7 +631,7 @@ func verifyAnalogData(exportFile string, sourceFile string) {
 			} else { // 621
 				timestamp, _ := strconv.ParseInt(row2[0], 10, 64)
 				if timestamp >= startTimestamp {
-					remain4(row2)
+					remain5(row2)
 					boolLower(row2)
 					row2Ch <- row2
 				}
@@ -604,6 +668,206 @@ func verifyDigitalData(exportFile string, sourceFile string) {
 				row1Ch <- newRow
 			} else {
 				row1Ch <- row1
+			}
+		}
+	}()
+	boolLower := func(row []string) {
+		// 将False True小写
+		for _, index := range []int{2, 3, 4, 5, 6, 7, 8} {
+			row[index] = strings.ToLower(row[index])
+		}
+	}
+	// 处理原始数据
+	go func() {
+		for {
+			row2, err2 := reader2.Read()
+			if err2 == io.EOF {
+				close(row2Ch)
+				file2.Close()
+				return
+			}
+			if len(row2[0]) == 0 || row2[0] == "TIME" {
+				continue // 去除首行和空行
+			}
+			if testID == 613 {
+				// 1号测点
+				if row2[1] == "1" {
+					timestamp, _ := strconv.ParseInt(row2[0], 10, 64)
+					// 开始时间
+					if timestamp >= startTimestamp {
+						boolLower(row2)
+						row2Ch <- row2
+					}
+				}
+			} else {
+				timestamp, _ := strconv.ParseInt(row2[0], 10, 64)
+				// 开始时间
+				if timestamp >= startTimestamp {
+					boolLower(row2)
+					row2Ch <- row2
+				}
+			}
+
+		}
+	}()
+	// 检验
+	verifyRecord(row1Ch, row2Ch)
+}
+
+// 96H历史数据量 因为数据量太大，无法导出的时候直接排序，导致和原始数据不对应，必须手动处理
+// select P_NUM, AV, AVR, Q, BF, FQ, FAI, MS, TEW, CST from root.sg.unit0.historyA.d* where time < 1970-01-04T08:00:00 order by time asc, P_NUM asc align by device
+func verifyAnalogDataHis96(exportFile string, sourceFile string) {
+	file1, _ := os.Open(exportFile)
+	file2, _ := os.Open(sourceFile)
+	reader1 := csv.NewReader(file1)
+	reader2 := csv.NewReader(file2)
+	row1Ch := make(chan []string)
+	row2Ch := make(chan []string)
+	remain5 := func(row []string) {
+		// 保留n位小数
+		for _, index := range []int{2, 3, 7} {
+			t1, _ := strconv.ParseFloat(row[index], 32)
+			row[index] = fmt.Sprintf("%.5f", t1)
+		}
+	}
+	// 处理导出的数据
+	go func() {
+		var rowTmp = make([][]string, 31) // 0不用
+		var count = 1
+		for {
+			row1, err1 := reader1.Read()
+			if err1 == io.EOF {
+				close(row1Ch)
+				file1.Close()
+				return
+			}
+			if len(row1[0]) == 0 || row1[0] == "Time" {
+				continue // 去除首行和空行
+			}
+
+			//去掉设备列
+			if len(row1) == 12 {
+				row1[0] = row1[0][:len(row1[0])-6] // 去掉时间列的ns值
+				newRow := append(row1[:1], row1[2:]...)
+				remain5(newRow)
+				id, _ := strconv.ParseInt(newRow[1], 10, 32)
+				if count == 31 {
+					for i := 1; i <= 30; i++ {
+						//fmt.Println(rowTmp[i])
+						row1Ch <- rowTmp[i]
+					}
+					count = 1
+				}
+				rowTmp[id] = newRow
+				count++
+
+			} else if len(row1) == 11 {
+				// export导出bug，没有0时间戳
+				newRow := append([]string{"0"}, row1[1:]...)
+				remain5(newRow)
+				id, _ := strconv.ParseInt(newRow[1], 10, 32)
+				if count == 31 {
+					for i := 1; i <= 30; i++ {
+						row1Ch <- rowTmp[i]
+					}
+					count = 1
+				} else {
+					rowTmp[id] = newRow
+					count++
+				}
+			}
+		}
+	}()
+	boolLower := func(row []string) {
+		// 将False True小写
+		for _, index := range []int{4, 5, 6, 8} {
+			row[index] = strings.ToLower(row[index])
+		}
+	}
+	// 处理原始数据
+	go func() {
+		for {
+			row2, err2 := reader2.Read()
+			if err2 == io.EOF {
+				close(row2Ch)
+				file2.Close()
+				return
+			}
+			if len(row2[0]) == 0 || row2[0] == "TIME" {
+				continue // 去除首行和空行
+			}
+			if testID == 613 {
+				// 1号测点
+				if row2[1] == "1" {
+					timestamp, _ := strconv.ParseInt(row2[0], 10, 64)
+					// 最近一分钟
+					if timestamp >= startTimestamp {
+						remain5(row2)
+						boolLower(row2)
+						row2Ch <- row2
+					}
+				}
+			} else { // 621
+				timestamp, _ := strconv.ParseInt(row2[0], 10, 64)
+				if timestamp >= startTimestamp {
+					remain5(row2)
+					boolLower(row2)
+					row2Ch <- row2
+				}
+			}
+		}
+	}()
+	// 检验
+	verifyRecord(row1Ch, row2Ch)
+}
+
+func verifyDigitalDataHis96(exportFile string, sourceFile string) {
+	file1, _ := os.Open(exportFile)
+	file2, _ := os.Open(sourceFile)
+	reader1 := csv.NewReader(file1)
+	reader2 := csv.NewReader(file2)
+	row1Ch := make(chan []string)
+	row2Ch := make(chan []string)
+	// 处理导出的数据
+	go func() {
+		var rowTmp = make([][]string, 71) // 0不用
+		var count = 1
+		for {
+			row1, err1 := reader1.Read()
+			if err1 == io.EOF {
+				close(row1Ch)
+				file1.Close()
+				return
+			}
+			if len(row1[0]) == 0 || row1[0] == "Time" {
+				continue // 去除首行和空行
+			}
+			//去掉normal设备列
+			if len(row1) == 12 {
+				row1[0] = row1[0][:len(row1[0])-6] // 去掉时间列的ns值
+				newRow := append(row1[:1], row1[2:]...)
+				id, _ := strconv.ParseInt(newRow[1], 10, 32)
+				if count == 71 {
+					for i := 1; i <= 70; i++ {
+						row1Ch <- rowTmp[i]
+					}
+					count = 1
+				}
+				rowTmp[id] = newRow
+				count++
+
+			} else if len(row1) == 11 {
+				newRow := append([]string{"0"}, row1[1:]...)
+				id, _ := strconv.ParseInt(newRow[1], 10, 32)
+				if count == 71 {
+					for i := 1; i <= 70; i++ {
+						row1Ch <- rowTmp[i]
+					}
+					count = 1
+				} else {
+					rowTmp[id] = newRow
+					count++
+				}
 			}
 		}
 	}()
