@@ -76,7 +76,7 @@ func login(param *C.char) C.int {
 
 	baseRoot = params[6]
 	// 控制session的并发连接数上限，否则可能断开连接
-	sessionPool = client.NewSessionPool(config, int(conMaxSize), 60000, 60000, false)
+	sessionPool = client.NewSessionPool(config, int(conMaxSize), 600000, 600000, false)
 
 	// 线程池
 	threadPool, err = ants.NewPoolWithFunc(
