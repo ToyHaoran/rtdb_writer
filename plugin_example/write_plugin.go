@@ -91,7 +91,6 @@ func login(param *C.char) C.int {
 			wg.Done()
 		})
 	checkError(nil, err)
-
 	return 0
 }
 

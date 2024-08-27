@@ -104,7 +104,7 @@ func main() {
 		RunCommand("mkdir -p ../CSV2/his")
 		// 导出IOTDB数据
 		RunCommand(exportSh + " -h " + host + " -p 6667 -u root -pw root -t ../CSV2/his -s ./sqlfile/613.sql -tf timestamp -lpf 50000")
-		// 原始数据太大，用tail将最后n行导出。 tail -n 30000 ../CSV/testHisAnalog.csv > ../CSV2/his/testHisAnalog.csv
+		//// 原始数据太大，用tail将最后n行导出。 tail -n 30000 ../CSV/testHisAnalog.csv > ../CSV2/his/testHisAnalog.csv
 		sourceFiles := strings.Split(filePath, ",")
 		cmd1 := exec.Command("bash", "-c", "tail -n 20000 "+sourceFiles[0]+" | tr -d '\\r'") //  2.5*60秒*30测点
 		cmd1.Stdout, _ = os.Create("../CSV2/his/testHisAnalog.csv")
@@ -236,8 +236,13 @@ func main() {
 			fmt.Println("开始对比NormalDigital数据...")
 			verifyDigitalData("../CSV2/normal/dump1_0.csv", "../CSV2/normal/testNormalDigital.csv")
 		}
+	case 6281:
+		// 循环创建测点
+		createMeasurements(true)
+	case 6282:
+		createMeasurements(false)
 	case 651:
-		// 验证实时数据集是否一致
+		// 验证实时数据集是否一致，根据任意断面数量验证，速度较慢
 		// ./test --testID=651 --host=192.168.1.112 --fastSectionCount=40400 --normalSectionCount=102 --filePath=../CSV/1721454092945_REALTIME_FAST_ANALOG.csv,../CSV/1721454092945_REALTIME_FAST_DIGITAL.csv,../CSV/1721454092945_REALTIME_NORMAL_ANALOG.csv,../CSV/1721454092945_REALTIME_NORMAL_DIGITAL.csv
 		// 先删除已导出的数据 或 创建新目录
 		RunCommand("mkdir -p ../CSV2/record100")
@@ -284,11 +289,27 @@ func main() {
 		verifyAnalogData("../CSV2/record100/dump2_0.csv", "../CSV2/record100/testNormalAnalog.csv")
 		fmt.Println("开始对比NormalDigital数据...")
 		verifyDigitalData("../CSV2/record100/dump3_0.csv", "../CSV2/record100/testNormalDigital.csv")
-	case 6281:
-		// 循环创建测点
-		createMeasurements(true)
-	case 6282:
-		createMeasurements(false)
+	case 6511:
+		// 验证实时数据集是否一致，最后100条数据验证。
+		// ./test --testID=6511 --host=192.168.1.102 --filePath=../CSV/1721454092945_REALTIME_FAST_ANALOG.csv,../CSV/1721454092945_REALTIME_FAST_DIGITAL.csv,../CSV/1721454092945_REALTIME_NORMAL_ANALOG.csv,../CSV/1721454092945_REALTIME_NORMAL_DIGITAL.csv
+		// 先删除已导出的数据 或 创建新目录
+		RunCommand("mkdir -p ../CSV2/record100")
+		sourceFiles := strings.Split(filePath, ",")
+		// 导出IOTDB数据
+		RunCommand(exportSh + " -h " + host + " -p 6667 -u root -pw root -t ../CSV2/record100 -s ./sqlfile/651.sql -tf timestamp -lpf 400")
+		// 导出源数据(因为数据起始和条数不同，需要最大参数)
+		exec.Command("bash", "-c", "tail -n 100 "+sourceFiles[0]+" | tr -d '\\r' | tac  > ../CSV2/record100/testFastAnalog.csv").Run()
+		exec.Command("bash", "-c", "tail -n 100 "+sourceFiles[1]+" | tr -d '\\r' | tac  > ../CSV2/record100/testFastDigital.csv").Run()
+		exec.Command("bash", "-c", "tail -n 100 "+sourceFiles[2]+" | tr -d '\\r' | tac  > ../CSV2/record100/testNormalAnalog.csv").Run()
+		exec.Command("bash", "-c", "tail -n 100 "+sourceFiles[3]+" | tr -d '\\r' | tac  > ../CSV2/record100/testNormalDigital.csv").Run()
+		fmt.Println("开始对比FastAnalog数据...")
+		verifyAnalogData("../CSV2/record100/dump0_0.csv", "../CSV2/record100/testFastAnalog.csv")
+		fmt.Println("开始对比FastDigital数据...")
+		verifyDigitalData("../CSV2/record100/dump1_0.csv", "../CSV2/record100/testFastDigital.csv")
+		fmt.Println("开始对比NormalAnalog数据...")
+		verifyAnalogData("../CSV2/record100/dump2_0.csv", "../CSV2/record100/testNormalAnalog.csv")
+		fmt.Println("开始对比NormalDigital数据...")
+		verifyDigitalData("../CSV2/record100/dump3_0.csv", "../CSV2/record100/testNormalDigital.csv")
 	case 667:
 		measurements := []string{"s1"}
 		dataTypes := []client.TSDataType{client.INT32}
@@ -312,7 +333,7 @@ func main() {
 		device := baseRoot + ".d669"
 		timeStart, err := time.Parse("2006-01-02 15:04:05", "2024-01-01 00:00:00")
 		checkError(nil, err)
-		createAndInsertData(100000, timeStart, interval, device, measurements, dataTypes)
+		createAndInsertData(600, timeStart, interval, device, measurements, dataTypes)
 	case 991:
 		// 制造历史模拟量
 		initAnalogData := []string{
@@ -1166,9 +1187,9 @@ func createAndInsertData(batchCount int, timeStart time.Time, interval time.Dura
 	// 是否周期性写入
 	if periodic {
 		for i := 0; i < batchCount; i++ {
-			time.Sleep(interval) // 间隔时间
+			time.Sleep(interval) // 间隔时间  + ".d" + strconv.Itoa(rand.Intn(10000))
 			tablet, err := client.NewTablet(device, measurementSchemas, 1)
-			timestamp := timeStart.Add(interval * time.Duration(i)).UnixNano()
+			timestamp := timeStart.Add(interval * time.Duration(i)).UnixMilli()
 			// 每个tablet只有一行数据
 			tablet.SetTimestamp(timestamp, 0)
 			for col := 0; col < columnCount; col++ {
@@ -1187,7 +1208,7 @@ func createAndInsertData(batchCount int, timeStart time.Time, interval time.Dura
 		tablet, err := client.NewTablet(device, measurementSchemas, batchCount)
 		checkError(nil, err)
 		for i := 0; i < batchCount; i++ {
-			timestamp := timeStart.Add(interval * time.Duration(i)).UnixNano()
+			timestamp := timeStart.Add(interval * time.Duration(i)).UnixMilli()
 			// 每个tablet有batchCount行数据
 			tablet.SetTimestamp(timestamp, i)
 			for col := 0; col < columnCount; col++ {
@@ -1261,13 +1282,13 @@ func createMeasurements(isAnalog bool) {
 			log.Println(err)
 			fmt.Println("设备总数=", i)
 			fmt.Println("测点总数=", i*10)
-			break
+			return
 		}
 		if err = client.VerifySuccess(r); err != nil {
 			log.Println(err)
 			fmt.Println("设备总数=", i)
 			fmt.Println("测点总数=", i*10)
-			break
+			return
 		}
 		sessionPool.PutBack(session)
 	}
